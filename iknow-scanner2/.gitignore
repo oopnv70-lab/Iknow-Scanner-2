@@ -1,0 +1,20 @@
+# Build output
+build/
+*.apk
+*.idsig
+
+# IDE files
+.idea/
+*.iml
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.bak2
+
+# Temporary files
+*.tmp
+*.log
