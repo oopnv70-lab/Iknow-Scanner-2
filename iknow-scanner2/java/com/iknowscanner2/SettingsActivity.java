@@ -189,15 +189,7 @@ public class SettingsActivity extends Activity {
                         }
                     }
                     
-                    String wNumber = "";
-                    if (content.startsWith("W000")) {
-                        int spaceIndex = content.indexOf(" ");
-                        if (spaceIndex > 0) {
-                            wNumber = content.substring(0, spaceIndex);
-                        } else {
-                            wNumber = content;
-                        }
-                    }
+                    String wNumber = extractWNumber(content);
                     
                     if (!wNumber.isEmpty()) {
                         // 如果 W 编号已存在，保留第一个（不覆盖）
@@ -313,8 +305,8 @@ public class SettingsActivity extends Activity {
             if (entry == null) continue;   // 无法识别编号/型号/版本的跳过
             total++;
 
-            // 组装内部标准格式（与扫描结果一致）：W编号  型号  版本
-            String internal = entry.wNumber + "  " + entry.model + "  " + entry.version;
+            // 组装带汉字标签的存储格式：编号 W000xxxxx  型号 xxx  系统版本 xxx
+            String internal = "编号 " + entry.wNumber + "  型号 " + entry.model + "  系统版本 " + entry.version;
             String category = categorizeImport(entry.model);
 
             if (saveImportedLine(internal, category)) {
@@ -408,12 +400,8 @@ public class SettingsActivity extends Activity {
 
             java.io.File file = new java.io.File(dir, filename);
 
-            // 提取当前行 W 编号
-            String currentW = "";
-            if (line.startsWith("W000")) {
-                int sp = line.indexOf(" ");
-                currentW = sp > 0 ? line.substring(0, sp) : line;
-            }
+            // 提取当前行 W 编号（兼容裸格式和带标签格式）
+            String currentW = extractWNumber(line);
 
             // 检查是否已存在（按 W 编号去重）
             boolean exists = false;
@@ -426,11 +414,7 @@ public class SettingsActivity extends Activity {
                         int eb = content.indexOf("]");
                         if (eb > 0) content = content.substring(eb + 1).trim();
                     }
-                    String exW = "";
-                    if (content.startsWith("W000")) {
-                        int sp = content.indexOf(" ");
-                        exW = sp > 0 ? content.substring(0, sp) : content;
-                    }
+                    String exW = extractWNumber(content);
                     if (!exW.isEmpty() && exW.equals(currentW)) { exists = true; break; }
                 }
                 reader.close();
@@ -446,6 +430,14 @@ public class SettingsActivity extends Activity {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    // 统一的编号提取：兼容「W00012345  ...」裸格式和「编号 W00012345 型号 ...」带标签格式
+    private String extractWNumber(String line) {
+        if (line == null) return "";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("W000\\d{5}").matcher(line);
+        if (m.find()) return m.group();
+        return "";
     }
 
     // 解析结果载体

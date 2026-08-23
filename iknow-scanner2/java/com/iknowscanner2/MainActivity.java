@@ -465,17 +465,9 @@ public class MainActivity extends Activity {
             
             java.io.File file = new java.io.File(dir, filename);
             
-            // 提取当前行的 W 编号
-            String currentWNumber = "";
-            if (line.startsWith("W000")) {
-                int spaceIndex = line.indexOf(" ");
-                if (spaceIndex > 0) {
-                    currentWNumber = line.substring(0, spaceIndex);
-                } else {
-                    currentWNumber = line;
-                }
-            }
-            
+            // 提取当前行的 W 编号（兼容裸格式和带标签格式）
+            String currentWNumber = extractWNumber(line);
+
             // 如果没有有效的 W 编号，直接保存
             if (currentWNumber.isEmpty()) {
                 java.io.FileWriter writer = new java.io.FileWriter(file, true);
@@ -483,7 +475,7 @@ public class MainActivity extends Activity {
                 writer.close();
                 return;
             }
-            
+
             // 检查文件中是否已存在相同的 W 编号
             boolean exists = false;
             if (file.exists()) {
@@ -491,11 +483,11 @@ public class MainActivity extends Activity {
                 String existingLine;
                 while ((existingLine = reader.readLine()) != null) {
                     if (existingLine.trim().isEmpty()) continue;
-                    
+
                     // 提取已有行的 W 编号
                     String existingWNumber = "";
                     String content = existingLine;
-                    
+
                     // 兼容旧的时间戳格式
                     if (content.startsWith("[")) {
                         int endBracket = content.indexOf("]");
@@ -503,16 +495,9 @@ public class MainActivity extends Activity {
                             content = content.substring(endBracket + 1).trim();
                         }
                     }
-                    
-                    if (content.startsWith("W000")) {
-                        int spaceIndex = content.indexOf(" ");
-                        if (spaceIndex > 0) {
-                            existingWNumber = content.substring(0, spaceIndex);
-                        } else {
-                            existingWNumber = content;
-                        }
-                    }
-                    
+
+                    existingWNumber = extractWNumber(content);
+
                     // 如果找到相同的 W 编号，标记为已存在
                     if (!existingWNumber.isEmpty() && existingWNumber.equals(currentWNumber)) {
                         exists = true;
@@ -747,10 +732,11 @@ public class MainActivity extends Activity {
                             int eb = content.indexOf("]");
                             if (eb > 0) content = content.substring(eb + 1).trim();
                         }
-                        if (content.startsWith(cn)) {
-                            // 命中：去掉编号本身，返回后面型号+版本部分
-                            String rest = content.substring(cn.length()).trim();
-                            return rest;
+                        // 用统一提取方法匹配编号（兼容裸格式和带标签格式）
+                        String w = extractWNumber(content);
+                        if (!w.isEmpty() && w.equals(cn)) {
+                            // 命中：返回该行去掉编号后的内容
+                            return content;
                         }
                     }
                 } finally {
@@ -761,6 +747,14 @@ public class MainActivity extends Activity {
             // 查重失败时忽略，按不存在处理（继续正常请求）
         }
         return null;
+    }
+
+    // 统一的编号提取：兼容「W00012345  ...」裸格式和「编号 W00012345 型号 ...」带标签格式
+    private String extractWNumber(String line) {
+        if (line == null) return "";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("W000\\d{5}").matcher(line);
+        if (m.find()) return m.group();
+        return "";
     }
 
     private void updateProgress(final int cur) {
