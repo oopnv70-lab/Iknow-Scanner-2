@@ -12,6 +12,8 @@ import java.io.*;
 import java.util.*;
 
 public class SettingsActivity extends Activity {
+    private static final int REQUEST_IMPORT_FILE = 1001;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -92,7 +94,7 @@ public class SettingsActivity extends Activity {
         btnImport.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showImportDialog();
+                openFilePicker();
             }
         });
         root.addView(btnImport, new LinearLayout.LayoutParams(
@@ -227,28 +229,70 @@ public class SettingsActivity extends Activity {
 
     // ==== 日志导入功能 ====
 
-    private void showImportDialog() {
-        final android.widget.EditText input = new android.widget.EditText(this);
-        input.setHint("粘贴日志，每行一条，例如：\n编号 W00021123  型号 FNE-N29  系统版本 6.1.0.151(C185E1R2P1)\n\n也支持纯空格分隔：\nW00021123 FNE-N29 6.1.0.151(C185E1R2P1)");
-        input.setGravity(Gravity.TOP);
-        input.setMinLines(8);
-        input.setMaxLines(16);
-        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT
-                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+    // 打开系统文件选择器，让用户选择本地 txt 文件
+    private void openFilePicker() {
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+        intent.setType("text/*");   // 文本文件，含 .txt / .log / .csv 等
+        intent.putExtra(android.content.Intent.EXTRA_MIME_TYPES,
+            new String[]{"text/plain", "application/octet-stream"});
+        try {
+            startActivityForResult(intent, REQUEST_IMPORT_FILE);
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开文件选择器: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
 
-        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
-            .setTitle("导入日志")
-            .setView(input)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("导入", new android.content.DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(android.content.DialogInterface d, int which) {
-                    String text = input.getText().toString();
-                    importLog(text);
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_IMPORT_FILE && resultCode == RESULT_OK && data != null) {
+            android.net.Uri uri = data.getData();
+            if (uri == null) {
+                Toast.makeText(this, "未选择文件", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String content = readTextFromUri(uri);
+            if (content == null || content.trim().isEmpty()) {
+                Toast.makeText(this, "文件为空或读取失败", Toast.LENGTH_LONG).show();
+                return;
+            }
+            importLog(content);
+        }
+    }
+
+    // 从 Uri 读取文本内容（兼容各种文件提供方）
+    private String readTextFromUri(android.net.Uri uri) {
+        java.io.InputStream is = null;
+        java.io.BufferedReader reader = null;
+        try {
+            is = getContentResolver().openInputStream(uri);
+            if (is == null) return null;
+
+            // 支持 UTF-8 和 GBK 两种编码（日志文件可能含中文，GBK 常见）
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+            byte[] raw = bos.toByteArray();
+
+            String content;
+            try {
+                content = new String(raw, "UTF-8");
+                // 简单检测乱码：若含替换符，尝试 GBK
+                if (content.contains("\uFFFD")) {
+                    content = new String(raw, "GBK");
                 }
-            })
-            .create();
-        dialog.show();
+            } catch (Exception e) {
+                content = new String(raw, "GBK");
+            }
+            return content;
+        } catch (Exception e) {
+            return null;
+        } finally {
+            try { if (reader != null) reader.close(); } catch (Exception ignored) {}
+            try { if (is != null) is.close(); } catch (Exception ignored) {}
+        }
     }
 
     private void importLog(String text) {
