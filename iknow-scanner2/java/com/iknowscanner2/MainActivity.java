@@ -665,8 +665,8 @@ public class MainActivity extends Activity {
         // 请求前先查本地是否已存在该编号，存在则跳过请求
         String existing = findExistingLine(cn);
         if (existing != null) {
-            // 本地已存在该编号，跳过请求，直接显示「已保存」
-            appendResult("已保存\n");
+            // 本地已存在该编号，跳过请求，显示「编号 已保存」
+            appendResult(cn + "  已保存\n");
             updateProgress(num);
             return;
         }
