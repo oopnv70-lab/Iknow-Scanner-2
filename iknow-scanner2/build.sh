@@ -18,10 +18,16 @@ javac -encoding UTF-8 -source 1.8 -target 1.8 \
   $(find "$DIR/java" -name "*.java") || exit 1
 
 echo "=== 2/5 d8 ==="
-java -cp "$R8_JAR" com.android.tools.r8.D8 \
-  --min-api 21 \
-  --output "$DIR/build/dex" \
-  $(find "$DIR/build/obj" -name "*.class") || exit 1
+if command -v d8 >/dev/null 2>&1; then
+  d8 --min-api 21 \
+    --output "$DIR/build/dex" \
+    $(find "$DIR/build/obj" -name "*.class") || exit 1
+else
+  java -cp "$R8_JAR" com.android.tools.r8.D8 \
+    --min-api 21 \
+    --output "$DIR/build/dex" \
+    $(find "$DIR/build/obj" -name "*.class") || exit 1
+fi
 
 echo "=== 3/5 aapt2 compile/link ==="
 aapt2 link \
