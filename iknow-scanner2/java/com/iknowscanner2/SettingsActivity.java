@@ -85,6 +85,20 @@ public class SettingsActivity extends Activity {
         editInterval.setText(String.valueOf(interval));
         editConcurrent.setText(String.valueOf(concurrent));
         
+        // 导入日志按钮
+        Button btnImport = new Button(this);
+        btnImport.setText("导入日志");
+        btnImport.setPadding(0, 32, 0, 32);
+        btnImport.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showImportDialog();
+            }
+        });
+        root.addView(btnImport, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+
         // 整理历史记录按钮
         Button btnOrganize = new Button(this);
         btnOrganize.setText("整理历史记录");
@@ -209,5 +223,192 @@ public class SettingsActivity extends Activity {
         } catch (Exception e) {
             Toast.makeText(this, "整理失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
+    }
+
+    // ==== 日志导入功能 ====
+
+    private void showImportDialog() {
+        final android.widget.EditText input = new android.widget.EditText(this);
+        input.setHint("粘贴日志，每行一条，例如：\n编号 W00021123  型号 FNE-N29  系统版本 6.1.0.151(C185E1R2P1)\n\n也支持纯空格分隔：\nW00021123 FNE-N29 6.1.0.151(C185E1R2P1)");
+        input.setGravity(Gravity.TOP);
+        input.setMinLines(8);
+        input.setMaxLines(16);
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+
+        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
+            .setTitle("导入日志")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("导入", new android.content.DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(android.content.DialogInterface d, int which) {
+                    String text = input.getText().toString();
+                    importLog(text);
+                }
+            })
+            .create();
+        dialog.show();
+    }
+
+    private void importLog(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            Toast.makeText(this, "请先粘贴日志内容", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String[] rawLines = text.split("\\r?\\n");
+        int total = 0;      // 识别到的总条数
+        int added = 0;      // 去重后新增条数
+
+        for (String raw : rawLines) {
+            String line = raw.trim();
+            if (line.isEmpty()) continue;
+
+            ParsedEntry entry = parseLogLine(line);
+            if (entry == null) continue;   // 无法识别编号/型号/版本的跳过
+            total++;
+
+            // 组装内部标准格式（与扫描结果一致）：W编号  型号  版本
+            String internal = entry.wNumber + "  " + entry.model + "  " + entry.version;
+            String category = categorizeImport(entry.model);
+
+            if (saveImportedLine(internal, category)) {
+                added++;
+            }
+        }
+
+        if (total == 0) {
+            Toast.makeText(this, "未识别到有效日志（需包含编号 W000xxxxx）", Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this, "识别 " + total + " 条，新增 " + added + " 条", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    // 解析单行日志，提取 编号/型号/版本
+    private ParsedEntry parseLogLine(String line) {
+        try {
+            java.util.regex.Matcher m;
+
+            // 1. 编号：W000 + 数字
+            java.util.regex.Pattern pW = java.util.regex.Pattern.compile("W000\\d{5}");
+            m = pW.matcher(line);
+            if (!m.find()) return null;
+            String wNumber = m.group();
+
+            // 编号之后的剩余内容（用于提取型号和版本）
+            String rest = line.substring(m.end());
+
+            // 2. 尝试按「型号 X  系统版本 Y」标签提取
+            String model = "";
+            String version = "";
+
+            // 带标签格式：型号 xxx  系统版本 yyy
+            java.util.regex.Matcher mM = java.util.regex.Pattern
+                .compile("型号\\s*(.*?)\\s*系统版本\\s*(.*?)\\s*$").matcher(rest);
+            if (mM.find()) {
+                model = mM.group(1).trim();
+                version = mM.group(2).trim();
+            } else {
+                // 纯空白分隔格式：编号 型号 版本
+                String[] parts = rest.trim().split("\\s+");
+                if (parts.length >= 2) {
+                    model = parts[0];
+                    version = parts[1];
+                } else if (parts.length == 1) {
+                    model = parts[0];
+                }
+            }
+
+            // 版本号里去可能误带的尾部空格/杂质
+            version = version.trim();
+
+            if (model.isEmpty() && version.isEmpty()) {
+                // 至少要有型号
+                return null;
+            }
+
+            return new ParsedEntry(wNumber, model, version);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // 按型号分类（复用现有分类规则）
+    private String categorizeImport(String model) {
+        if (model.contains("高维禁用海外版") || model.contains("(High Level Repair Center is Forbidden)")) {
+            return "高维禁用海外版";
+        }
+        if (model.contains("高维禁用")) {
+            return "高维禁用";
+        }
+        if (model.contains("DPTF") || model.contains("WiFi") || model.contains("Bluetooth")
+            || model.contains("Driver") || model.contains("Firmware") || model.length() < 3) {
+            return "其他";
+        }
+        return "普通机型";
+    }
+
+    // 追加写入对应分类文件，按 W 编号去重；成功写入返回 true
+    private boolean saveImportedLine(String line, String category) {
+        try {
+            java.io.File dir = getExternalFilesDir(null);
+            if (dir == null) return false;
+            if (!dir.exists()) dir.mkdirs();
+
+            String filename;
+            if ("高维禁用".equals(category)) filename = "高维禁用.txt";
+            else if ("高维禁用海外版".equals(category)) filename = "高维禁用海外版.txt";
+            else if ("其他".equals(category)) filename = "其他.txt";
+            else filename = "普通机型.txt";
+
+            java.io.File file = new java.io.File(dir, filename);
+
+            // 提取当前行 W 编号
+            String currentW = "";
+            if (line.startsWith("W000")) {
+                int sp = line.indexOf(" ");
+                currentW = sp > 0 ? line.substring(0, sp) : line;
+            }
+
+            // 检查是否已存在（按 W 编号去重）
+            boolean exists = false;
+            if (file.exists() && !currentW.isEmpty()) {
+                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file));
+                String existing;
+                while ((existing = reader.readLine()) != null) {
+                    String content = existing;
+                    if (content.startsWith("[")) {
+                        int eb = content.indexOf("]");
+                        if (eb > 0) content = content.substring(eb + 1).trim();
+                    }
+                    String exW = "";
+                    if (content.startsWith("W000")) {
+                        int sp = content.indexOf(" ");
+                        exW = sp > 0 ? content.substring(0, sp) : content;
+                    }
+                    if (!exW.isEmpty() && exW.equals(currentW)) { exists = true; break; }
+                }
+                reader.close();
+            }
+
+            if (!exists) {
+                java.io.FileWriter writer = new java.io.FileWriter(file, true);
+                writer.write(line + "\n");
+                writer.close();
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // 解析结果载体
+    private static class ParsedEntry {
+        String wNumber;
+        String model;
+        String version;
+        ParsedEntry(String w, String m, String v) { wNumber = w; model = m; version = v; }
     }
 }
