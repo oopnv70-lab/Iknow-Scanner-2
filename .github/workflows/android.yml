@@ -28,8 +28,8 @@ jobs:
 
     - name: download r8.jar
       run: |
-        mkdir -p /usr/local/lib
-        curl -L -o /usr/local/lib/r8.jar \
+        mkdir -p "$HOME/tools"
+        curl -L -o "$HOME/tools/r8.jar" \
           https://storage.googleapis.com/r8-releases/raw/main/r8.jar
 
     - name: generate signing keystore
@@ -47,7 +47,7 @@ jobs:
     - name: build with build.sh
       run: |
         export ANDROID_JAR="$ANDROID_SDK_ROOT/platforms/android-36/android.jar"
-        export R8_JAR="/usr/local/lib/r8.jar"
+        export R8_JAR="$HOME/tools/r8.jar"
         export PATH="$ANDROID_SDK_ROOT/build-tools/36.0.0:$PATH"
         sh iknow-scanner2/build.sh
 
