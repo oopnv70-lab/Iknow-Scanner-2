@@ -276,7 +276,6 @@ public class MainActivity extends Activity {
 
         appendResult("\n--------------------------------------------------\n");
         appendResult((resume ? "[续扫] " : "[开始] ") + fmt(s) + " → " + fmt(e) + "\n");
-        appendResult(String.format("%-12s %-14s %-26s %s", "W编号", "型号", "版本", "大小") + "\n");
         appendResult("--------------------------------------------------\n");
 
         final int fs = s, fe = e;
@@ -706,7 +705,9 @@ public class MainActivity extends Activity {
             }
 
             String line = String.format("%-12s %-14s %-26s %s", cn, model, ver, fs);
-            appendResult(line + "\n\n");
+            // 显示时带上汉字标识，存储仍用裸格式（line 用于去重/保存）
+            String display = "编号 " + cn + "  型号 " + model + "  系统版本 " + ver + "  大小 " + fs;
+            appendResult(display + "\n\n");
             if (found) {
                 hitCount.incrementAndGet();
                 // 实时分类并保存到文件
@@ -716,7 +717,7 @@ public class MainActivity extends Activity {
             updateProgress(num);
 
         } catch (IOException ex) {
-            appendResult(String.format("%-12s %-14s %-26s %s", cn, "", "", "") + "\n\n");
+            appendResult("编号 " + cn + "  型号   系统版本   大小 \n\n");
             updateProgress(num);
         } finally {
             if (c != null) c.disconnect();
