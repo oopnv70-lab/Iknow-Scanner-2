@@ -5,8 +5,8 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 PKG="com.iknowscanner2"
 MAIN="com.iknowscanner2.MainActivity"
 
-ANDROID_JAR="/usr/local/lib/android-36.jar"
-R8_JAR="/usr/local/lib/r8.jar"
+ANDROID_JAR="${ANDROID_JAR:-/usr/local/lib/android-36.jar}"
+R8_JAR="${R8_JAR:-/usr/local/lib/r8.jar}"
 
 rm -rf "$DIR/build"
 mkdir -p "$DIR/build/obj" "$DIR/build/dex" "$DIR/build/apk"
@@ -45,7 +45,7 @@ apksigner sign --ks "$HOME/.apksigner/keystore.jks" \
   --out "$DIR/iknow-scanner2.apk" \
   "$DIR/build/apk/aligned.apk" || exit 1
 
-cp "$DIR/iknow-scanner2.apk" /data/local/tmp/iknow-scanner2.apk
+[ -d /data/local/tmp ] && cp "$DIR/iknow-scanner2.apk" /data/local/tmp/iknow-scanner2.apk
 
 echo "=== 完成 ==="
 echo "APK: $DIR/iknow-scanner2.apk"
