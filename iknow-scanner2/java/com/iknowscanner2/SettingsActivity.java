@@ -239,17 +239,33 @@ public class SettingsActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_IMPORT_FILE && resultCode == RESULT_OK && data != null) {
-            android.net.Uri uri = data.getData();
+            final android.net.Uri uri = data.getData();
             if (uri == null) {
                 Toast.makeText(this, "未选择文件", Toast.LENGTH_SHORT).show();
                 return;
             }
-            String content = readTextFromUri(uri);
-            if (content == null || content.trim().isEmpty()) {
-                Toast.makeText(this, "文件为空或读取失败", Toast.LENGTH_LONG).show();
-                return;
-            }
-            importLog(content);
+            Toast.makeText(this, "正在导入…", Toast.LENGTH_SHORT).show();
+            // 后台线程执行读取+解析+写入，避免主线程阻塞导致 ANR/黑屏
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    final String content = readTextFromUri(uri);
+                    if (content == null || content.trim().isEmpty()) {
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                Toast.makeText(SettingsActivity.this, "文件为空或读取失败", Toast.LENGTH_LONG).show();
+                            }
+                        });
+                        return;
+                    }
+                    final String summary = importLog(content);
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            Toast.makeText(SettingsActivity.this, summary, Toast.LENGTH_LONG).show();
+                        }
+                    });
+                }
+            }).start();
         }
     }
 
@@ -287,37 +303,92 @@ public class SettingsActivity extends Activity {
         }
     }
 
-    private void importLog(String text) {
+    // 导入日志：解析并分类入库，返回结果摘要字符串
+    private String importLog(String text) {
         if (text == null || text.trim().isEmpty()) {
-            Toast.makeText(this, "请先粘贴日志内容", Toast.LENGTH_SHORT).show();
-            return;
+            return "请先选择日志文件";
         }
 
         String[] rawLines = text.split("\\r?\\n");
         int total = 0;      // 识别到的总条数
         int added = 0;      // 去重后新增条数
 
-        for (String raw : rawLines) {
-            String line = raw.trim();
-            if (line.isEmpty()) continue;
+        // 一次性把四个分类文件里已存在的 W 编号读进内存，避免每行都重复打开文件（消除 O(n²)）
+        java.util.Map<String, java.util.Set<String>> existingByFile =
+            new java.util.HashMap<>();
+        java.io.File dir = getExternalFilesDir(null);
+        if (dir != null && dir.exists()) {
+            String[] filenames = {"普通机型.txt", "高维禁用.txt", "高维禁用海外版.txt", "其他.txt"};
+            for (String fn : filenames) {
+                java.util.Set<String> set = new java.util.HashSet<>();
+                java.io.File f = new java.io.File(dir, fn);
+                if (f.exists()) {
+                    try {
+                        java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(f));
+                        String l;
+                        while ((l = reader.readLine()) != null) {
+                            set.add(extractWNumber(l));
+                        }
+                        reader.close();
+                    } catch (Exception ignored) {}
+                }
+                existingByFile.put(fn, set);
+            }
+        }
 
-            ParsedEntry entry = parseLogLine(line);
-            if (entry == null) continue;   // 无法识别编号/型号/版本的跳过
-            total++;
+        // 预创建四个文件句柄，批量追加写入（避免每行 open/close）
+        java.util.Map<String, java.io.FileWriter> writers = new java.util.HashMap<>();
 
-            // 组装带汉字标签的存储格式：编号 W000xxxxx  型号 xxx  系统版本 xxx
-            String internal = "编号 " + entry.wNumber + "  型号 " + entry.model + "  系统版本 " + entry.version;
-            String category = categorizeImport(entry.model);
+        try {
+            for (String raw : rawLines) {
+                String line = raw.trim();
+                if (line.isEmpty()) continue;
 
-            if (saveImportedLine(internal, category)) {
+                ParsedEntry entry = parseLogLine(line);
+                if (entry == null) continue;   // 无法识别编号/型号/版本的跳过
+                total++;
+
+                // 组装带汉字标签的存储格式：编号 W000xxxxx  型号 xxx  系统版本 xxx
+                String internal = "编号 " + entry.wNumber + "  型号 " + entry.model + "  系统版本 " + entry.version;
+                String category = categorizeImport(entry.model);
+
+                String filename;
+                if ("高维禁用".equals(category)) filename = "高维禁用.txt";
+                else if ("高维禁用海外版".equals(category)) filename = "高维禁用海外版.txt";
+                else if ("其他".equals(category)) filename = "其他.txt";
+                else filename = "普通机型.txt";
+
+                java.util.Set<String> existing = existingByFile.get(filename);
+                if (existing == null) {
+                    existing = new java.util.HashSet<>();
+                    existingByFile.put(filename, existing);
+                }
+                if (entry.wNumber.isEmpty() || existing.contains(entry.wNumber)) {
+                    continue;  // 已存在，跳过
+                }
+                existing.add(entry.wNumber);
+
+                java.io.FileWriter writer = writers.get(filename);
+                if (writer == null) {
+                    java.io.File file = new java.io.File(getExternalFilesDir(null), filename);
+                    writer = new java.io.FileWriter(file, true);
+                    writers.put(filename, writer);
+                }
+                writer.write(internal + "\n");
                 added++;
+            }
+        } catch (Exception e) {
+            // 忽略单条写入异常
+        } finally {
+            for (java.io.FileWriter w : writers.values()) {
+                try { w.close(); } catch (Exception ignored) {}
             }
         }
 
         if (total == 0) {
-            Toast.makeText(this, "未识别到有效日志（需包含编号 W000xxxxx）", Toast.LENGTH_LONG).show();
+            return "未识别到有效日志（需包含编号 W000xxxxx）";
         } else {
-            Toast.makeText(this, "识别 " + total + " 条，新增 " + added + " 条", Toast.LENGTH_LONG).show();
+            return "识别 " + total + " 条，新增 " + added + " 条";
         }
     }
 
@@ -383,53 +454,6 @@ public class SettingsActivity extends Activity {
             return "其他";
         }
         return "普通机型";
-    }
-
-    // 追加写入对应分类文件，按 W 编号去重；成功写入返回 true
-    private boolean saveImportedLine(String line, String category) {
-        try {
-            java.io.File dir = getExternalFilesDir(null);
-            if (dir == null) return false;
-            if (!dir.exists()) dir.mkdirs();
-
-            String filename;
-            if ("高维禁用".equals(category)) filename = "高维禁用.txt";
-            else if ("高维禁用海外版".equals(category)) filename = "高维禁用海外版.txt";
-            else if ("其他".equals(category)) filename = "其他.txt";
-            else filename = "普通机型.txt";
-
-            java.io.File file = new java.io.File(dir, filename);
-
-            // 提取当前行 W 编号（兼容裸格式和带标签格式）
-            String currentW = extractWNumber(line);
-
-            // 检查是否已存在（按 W 编号去重）
-            boolean exists = false;
-            if (file.exists() && !currentW.isEmpty()) {
-                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file));
-                String existing;
-                while ((existing = reader.readLine()) != null) {
-                    String content = existing;
-                    if (content.startsWith("[")) {
-                        int eb = content.indexOf("]");
-                        if (eb > 0) content = content.substring(eb + 1).trim();
-                    }
-                    String exW = extractWNumber(content);
-                    if (!exW.isEmpty() && exW.equals(currentW)) { exists = true; break; }
-                }
-                reader.close();
-            }
-
-            if (!exists) {
-                java.io.FileWriter writer = new java.io.FileWriter(file, true);
-                writer.write(line + "\n");
-                writer.close();
-                return true;
-            }
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
     }
 
     // 统一的编号提取：兼容「W00012345  ...」裸格式和「编号 W00012345 型号 ...」带标签格式
