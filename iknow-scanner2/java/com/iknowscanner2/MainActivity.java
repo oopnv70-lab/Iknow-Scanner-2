@@ -662,6 +662,16 @@ public class MainActivity extends Activity {
 
     private void scanOne(int num) {
         String cn = fmt(num);
+
+        // 请求前先查本地是否已存在该编号，存在则跳过请求
+        String existing = findExistingLine(cn);
+        if (existing != null) {
+            // 直接显示本地已存内容并标注「已存在」，不发请求
+            appendResult(cn + "  " + existing.trim() + "  [已存在]\n\n");
+            updateProgress(num);
+            return;
+        }
+
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL(BASE_URL + cn).openConnection();
@@ -711,6 +721,45 @@ public class MainActivity extends Activity {
         } finally {
             if (c != null) c.disconnect();
         }
+    }
+
+    // 查询四个分类文件中是否已存在指定 W 编号，存在则返回该行的型号+版本部分，否则返回 null
+    private String findExistingLine(String cn) {
+        try {
+            java.io.File dir = getExternalFilesDir(null);
+            if (dir == null || !dir.exists()) return null;
+
+            String[] filenames = {"普通机型.txt", "高维禁用.txt", "高维禁用海外版.txt", "其他.txt"};
+            for (String filename : filenames) {
+                java.io.File file = new java.io.File(dir, filename);
+                if (!file.exists()) continue;
+
+                java.io.BufferedReader reader = null;
+                try {
+                    reader = new java.io.BufferedReader(new java.io.FileReader(file));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.trim().isEmpty()) continue;
+                        String content = line;
+                        // 兼容旧时间戳前缀 "[...]"
+                        if (content.startsWith("[")) {
+                            int eb = content.indexOf("]");
+                            if (eb > 0) content = content.substring(eb + 1).trim();
+                        }
+                        if (content.startsWith(cn)) {
+                            // 命中：去掉编号本身，返回后面型号+版本部分
+                            String rest = content.substring(cn.length()).trim();
+                            return rest;
+                        }
+                    }
+                } finally {
+                    if (reader != null) reader.close();
+                }
+            }
+        } catch (Exception e) {
+            // 查重失败时忽略，按不存在处理（继续正常请求）
+        }
+        return null;
     }
 
     private void updateProgress(final int cur) {
