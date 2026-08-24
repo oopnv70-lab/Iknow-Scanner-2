@@ -55,3 +55,13 @@ jobs:
       with:
         name: iknow-scanner2
         path: iknow-scanner2/iknow-scanner2.apk
+
+    - name: publish as pre-release
+      if: github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v0.1.0-${{ github.run_number }}
+        name: 测试版 v0.1.0 (build ${{ github.run_number }})
+        prerelease: true
+        generate_release_notes: true
+        files: iknow-scanner2/iknow-scanner2.apk
