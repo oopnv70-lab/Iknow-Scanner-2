@@ -668,16 +668,25 @@ public class MainActivity extends Activity {
             int code = c.getResponseCode();
             String loc = c.getHeaderField("Location");
             String ohc = c.getHeaderField("ohc-file-size");
-
             String model = "";
             String ver = "";
             String fs = "";
-
             if (ohc != null && ohc.length() > 0) {
                 fs = fs(ohc);
             }
 
+            // 判断 HTTP 错误码（非重定向、非 2xx），显示错误原因并保存到「其他」
             boolean redirect = (code == 301 || code == 302 || code == 303 || code == 307 || code == 308);
+            boolean success = (code >= 200 && code < 300);
+            if (!redirect && !success) {
+                String reason = errorReason(code);
+                appendResult("编号 " + cn + "  错误 " + reason + "\n\n");
+                // 保存到「其他」分类
+                saveLineToFile("编号 " + cn + "  错误 " + reason, "其他");
+                updateProgress(num);
+                return;
+            }
+
             boolean found = false;
             if (redirect && loc != null && loc.length() > 0) {
                 String json = decodeLocationJson(loc);
@@ -702,7 +711,9 @@ public class MainActivity extends Activity {
             updateProgress(num);
 
         } catch (IOException ex) {
-            appendResult("编号 " + cn + "  型号   系统版本   大小 \n\n");
+            // 网络错误：显示原因并保存到「其他」
+            appendResult("编号 " + cn + "  错误 网络错误(" + ex.getClass().getSimpleName() + ")\n\n");
+            saveLineToFile("编号 " + cn + "  错误 网络错误", "其他");
             updateProgress(num);
         } finally {
             if (c != null) c.disconnect();
@@ -755,6 +766,28 @@ public class MainActivity extends Activity {
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("W000\\d{5}").matcher(line);
         if (m.find()) return m.group();
         return "";
+    }
+
+    // 将 HTTP 状态码翻译成可读的错误原因
+    private String errorReason(int code) {
+        switch (code) {
+            case 400: return "400 请求错误";
+            case 401: return "401 未授权";
+            case 402: return "402 需要付费";
+            case 403: return "403 禁止访问";
+            case 404: return "404 未找到";
+            case 405: return "405 方法不允许";
+            case 408: return "408 请求超时";
+            case 429: return "429 请求过多(被限流)";
+            case 500: return "500 服务器内部错误";
+            case 502: return "502 网关错误";
+            case 503: return "503 服务不可用";
+            case 504: return "504 网关超时";
+            default:
+                if (code >= 500) return code + " 服务器错误";
+                if (code >= 400) return code + " 客户端错误";
+                return code + " 未知错误";
+        }
     }
 
     private void updateProgress(final int cur) {
