@@ -26,16 +26,22 @@ jobs:
       run: |
         sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-    - name: generate signing keystore
+    - name: prepare signing keystore (复用仓库内固定 keystore)
       run: |
         mkdir -p "$HOME/.apksigner"
-        if [ ! -f "$HOME/.apksigner/keystore.jks" ]; then
+        # 优先使用仓库内已提交的固定 keystore
+        if [ -f "iknow-scanner2/keystore.jks" ]; then
+          cp "iknow-scanner2/keystore.jks" "$HOME/.apksigner/keystore.jks"
+          echo "使用仓库内固定 keystore，签名稳定"
+        else
+          # 仓库内尚无 keystore，临时生成（签名不稳定，需运行 generate-keystore 工作流固定）
           keytool -genkeypair -v \
             -keystore "$HOME/.apksigner/keystore.jks" \
             -storepass android -keypass android \
             -alias android -keyalg RSA -keysize 2048 \
             -dname "CN=CI, OU=Dev, O=IknowScanner, L=Unknown, ST=Unknown, C=US" \
             -validity 10000
+          echo "::warning::仓库内无固定 keystore，本次签名不稳定，请运行 generate-keystore 工作流"
         fi
 
     - name: build with build.sh
