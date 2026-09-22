@@ -97,11 +97,14 @@ public class MainActivity extends Activity {
         btnResume.setText("续扫");
         btnResume.setVisibility(View.GONE);
         btnRow.addView(btnResume, weight());
-
+        // 【已屏蔽】「保存高维禁用」按钮不再显示（功能已废弃，扫描结果会实时自动分类保存）。
+        // 按钮对象仍创建，仅为兼容下方 setEnabled 调用；不加入布局，故 UI 上不可见、不占宽度。
         btnSaveForbidden = new Button(this);
         btnSaveForbidden.setText("保存高维禁用");
         btnSaveForbidden.setEnabled(false);
-        btnRow.addView(btnSaveForbidden, weight());
+        btnSaveForbidden.setVisibility(View.GONE);
+        // btnRow.addView(btnSaveForbidden, weight());  // 屏蔽入口：不再添加到按钮行
+
 
         btnStop = new Button(this);
         btnStop.setText("停止");
