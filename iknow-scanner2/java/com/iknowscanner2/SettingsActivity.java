@@ -61,7 +61,7 @@ public class SettingsActivity extends Activity {
         
         EditText editInterval = new EditText(this);
         editInterval.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        editInterval.setHint("建议 2000-6000");
+        editInterval.setHint("最小 334（约每秒 3 次）");
         root.addView(editInterval, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -75,7 +75,7 @@ public class SettingsActivity extends Activity {
         
         EditText editConcurrent = new EditText(this);
         editConcurrent.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        editConcurrent.setHint("建议 1-5");
+        editConcurrent.setHint("固定为 1（受速率上限约束）");
         root.addView(editConcurrent, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -125,9 +125,12 @@ public class SettingsActivity extends Activity {
                     int interval = Integer.parseInt(editInterval.getText().toString());
                     int concurrent = Integer.parseInt(editConcurrent.getText().toString());
                     
-                    if (interval < 100) interval = 100;
-                    if (concurrent < 1) concurrent = 1;
-                    if (concurrent > 10) concurrent = 10;
+                    // 与 MainActivity 中的硬性限流保持一致（HARD_MIN_INTERVAL_MS / HARD_MAX_CONCURRENT）：
+                    // 请求速率上限为每秒 3 次（最小间隔 334ms），且必须单线程。
+                    // 设置页在此直接夹紧输入值，避免用户填写更激进的值后误以为设置生效——
+                    // 实际无论填什么，MainActivity.scanRange() 都会再次硬性钳制。
+                    if (interval < 334) interval = 334;
+                    if (concurrent != 1) concurrent = 1;
                     
                     android.content.SharedPreferences prefs = getSharedPreferences("settings", MODE_PRIVATE);
                     prefs.edit()
