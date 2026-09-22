@@ -22,12 +22,16 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: set up Android SDK
-      uses: android-actions/setup-android@v3
-
+    # 不再使用 android-actions/setup-android@v3：
+    # 该 action 内部会执行 sdkmanager tools，而 Google 已从 SDK 仓库下架 tools 包，
+    # 导致 "Failed to find package 'tools'" -> exit 1 -> 整个 job 失败（与项目代码无关）。
+    # ubuntu-latest runner 本身已预装 Android SDK（ANDROID_SDK_ROOT=/usr/local/lib/android/sdk），
+    # 这里直接用其自带的 sdkmanager，避免第三方 action 的兼容性风险。
     - name: install Android platform & build-tools
       run: |
-        sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+        yes | "$SDKMANAGER" --licenses > /dev/null || true
+        "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
     - name: prepare signing keystore (复用仓库内固定 keystore)
       run: |
