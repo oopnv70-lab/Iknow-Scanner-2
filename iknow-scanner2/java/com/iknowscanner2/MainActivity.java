@@ -38,21 +38,27 @@ public class MainActivity extends Activity {
 
     // ==================== 硬性限流（不可绕过） ====================
     // 目标接口为 hihonor 官方固件下载服务。出于对服务端的负载保护以及避免触发
-    // 服务方风控等合规考虑，客户端对请求速率做强制封顶：每秒最多 3 次。
+    // 服务方风控等合规考虑，客户端对请求速率做强制封顶。
     //
     // 该上限写死在代码中，属编译期常量，无法通过以下任一方式突破：
     //   1) 在设置页输入更小的「请求间隔」或更大的「并发请求数」
     //   2) 直接修改 SharedPreferences（settings.xml）中的 interval / concurrent
     //   3) 用 adb 或其他工具篡改应用私有数据
     // 因为真正的钳制发生在 scanRange() 读取设置之后、发起请求之前。
-    private static final int HARD_MAX_REQUESTS_PER_SECOND = 3;
-    // 最小请求间隔（毫秒）。1000/3 = 333.33，向上取整为 334，
-    // 确保任意 1 秒滑动窗口内的请求数严格 <= 3（取 333 会实际允许 3.003 次/秒）。
-    private static final int HARD_MIN_INTERVAL_MS = 334;
+    //
+    // 【改限流值时只改这一个常量】HARD_MIN_INTERVAL_MS 会自动换算，
+    // 避免出现「改了一个数另一个没跟着变」导致设置无效的情况。
+    // 每秒 2 次 -> 1000/2 = 500ms
+    // 每秒 3 次 -> 1000/3 = 334ms（向上取整）
+    public static final int HARD_MAX_REQUESTS_PER_SECOND = 2;
+    // 最小请求间隔（毫秒），由 HARD_MAX_REQUESTS_PER_SECOND 自动换算。
+    // 向上取整保证任意 1 秒滑动窗口内的请求数严格 <= 上限。
+    public static final int HARD_MIN_INTERVAL_MS =
+            (int) Math.ceil(1000.0 / HARD_MAX_REQUESTS_PER_SECOND);
     // 并发线程数强制为 1。原因：并发会绕过间隔限制 —— 若允许 N 个线程各自 sleep，
-    // 整体速率约为 3 * N 次/秒，「每秒最多 3 次」即形同虚设。
-    // 因此要真正封顶 3 次/秒，必须单线程串行发送。
-    private static final int HARD_MAX_CONCURRENT = 1;
+    // 整体速率约为 上限 * N 次/秒，「每秒最多 N 次」即形同虚设。
+    // 因此要真正封顶速率，必须单线程串行发送。
+    public static final int HARD_MAX_CONCURRENT = 1;
 
     @Override
     protected void onCreate(Bundle b) {
