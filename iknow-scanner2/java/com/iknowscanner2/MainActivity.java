@@ -55,10 +55,30 @@ public class MainActivity extends Activity {
     // 向上取整保证任意 1 秒滑动窗口内的请求数严格 <= 上限。
     public static final int HARD_MIN_INTERVAL_MS =
             (int) Math.ceil(1000.0 / HARD_MAX_REQUESTS_PER_SECOND);
-    // 并发线程数强制为 1。原因：并发会绕过间隔限制 —— 若允许 N 个线程各自 sleep，
-    // 整体速率约为 上限 * N 次/秒，「每秒最多 N 次」即形同虚设。
-    // 因此要真正封顶速率，必须单线程串行发送。
-    public static final int HARD_MAX_CONCURRENT = 1;
+    // 并发请求数上限。用户可在设置页填 1..HARD_MAX_CONCURRENT 之间的任意值，
+    // 超出该上限才被钳回上限（不是一律钳成 1）。
+    // 注意：并发本身不再承担限速职责 —— 真正的速率封顶由下面的全局令牌闸门统一保证，
+    // 因此并发调大不会突破「每秒 HARD_MAX_REQUESTS_PER_SECOND 次」这条线。
+    public static final int HARD_MAX_CONCURRENT = 3;
+
+    // ==================== 全局令牌闸门（唯一速率封顶点） ====================
+    // 单线程与多线程共用同一把闸门：任何一次请求在发出前都必须先取得许可，
+    // 相邻两次许可之间强制间隔 >= HARD_MIN_INTERVAL_MS。
+    // 这样无论并发填几，整体速率恒 <= HARD_MAX_REQUESTS_PER_SECOND 次/秒。
+    private static final Object RATE_LOCK = new Object();
+    private static long nextPermitMs = 0L;
+
+    private static void acquireRatePermit() {
+        synchronized (RATE_LOCK) {
+            long now = System.currentTimeMillis();
+            if (now < nextPermitMs) {
+                try {
+                    Thread.sleep(nextPermitMs - now);
+                } catch (InterruptedException ignored) {}
+            }
+            nextPermitMs = System.currentTimeMillis() + HARD_MIN_INTERVAL_MS;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle b) {
@@ -421,15 +441,23 @@ public class MainActivity extends Activity {
         // 恒 >= HARD_MIN_INTERVAL_MS，因此任意 1 秒窗口内请求数必然 <= HARD_MAX_REQUESTS_PER_SECOND。
 
         if (concurrent <= 1) {
-            // 单线程模式（原来的逻辑）
+            // 单线程模式：每轮先取令牌再发请求，速率由全局闸门保证。
+            // 用户设置的 interval 只作为「更慢的下限」生效（不允许比闸门更快）。
+            long userInterval = Math.max(interval, HARD_MIN_INTERVAL_MS);
             for (int n = s; n <= e && running; n++) {
+                acquireRatePermit();
                 scanOne(n);
-                try { 
-                    Thread.sleep(interval); 
+                try {
+                    if (userInterval > HARD_MIN_INTERVAL_MS) {
+                        Thread.sleep(userInterval - HARD_MIN_INTERVAL_MS);
+                    }
                 } catch (Exception ignored) {}
             }
         } else {
-            // 多线程并发模式
+            // 多线程并发模式：并发只决定「同时在途的请求数」，
+            // 不再参与限速（原 sleep(interval/concurrent) 是假限速：只压住提交节奏，
+            // 压不住实际发送，且并发越大该值越小、方向相反，已删除）。
+            // 每个任务在发请求前统一走 acquireRatePermit()，整体速率恒 <= 上限。
             java.util.concurrent.ExecutorService executor = 
                 java.util.concurrent.Executors.newFixedThreadPool(concurrent);
             java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(e - s + 1);
@@ -441,6 +469,7 @@ public class MainActivity extends Activity {
                     public void run() {
                         try {
                             if (running) {
+                                acquireRatePermit();
                                 scanOne(num);
                             }
                         } catch (Exception ex) {
@@ -451,10 +480,8 @@ public class MainActivity extends Activity {
                     }
                 });
                 
-                // 控制提交速度，避免一次性提交太多任务
-                try { 
-                    Thread.sleep(interval / concurrent); 
-                } catch (Exception ignored) {}
+                // 不再在这里 sleep 控速：提交速度不影响发送速率，
+                // 真正节流点在每个任务的 acquireRatePermit()。
             }
             
             // 等待所有任务完成

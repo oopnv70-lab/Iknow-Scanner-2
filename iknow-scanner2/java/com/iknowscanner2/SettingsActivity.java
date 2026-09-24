@@ -76,7 +76,8 @@ public class SettingsActivity extends Activity {
         
         EditText editConcurrent = new EditText(this);
         editConcurrent.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        editConcurrent.setHint("固定为 1（受速率上限约束）");
+        editConcurrent.setHint("1 ~ " + MainActivity.HARD_MAX_CONCURRENT
+            + "（总速率上限仍为每秒 " + MainActivity.HARD_MAX_REQUESTS_PER_SECOND + " 次）");
         root.addView(editConcurrent, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
