@@ -25,6 +25,7 @@ import java.util.regex.Pattern;
 public class MainActivity extends Activity {
     private EditText editStart, editEnd;
     private Button btnStart, btnStop, btnClear, btnResume, btnSaveForbidden;
+    private Button btnTest429;   // 【测试入口】武装「下次请求强制 429」，用于验证熔断
     private TextView textProgress, textHitCount, textResult;
     private ScrollView resultScroll;
     private volatile boolean running = false;
@@ -60,6 +61,49 @@ public class MainActivity extends Activity {
     // 注意：并发本身不再承担限速职责 —— 真正的速率封顶由下面的全局令牌闸门统一保证，
     // 因此并发调大不会突破「每秒 HARD_MAX_REQUESTS_PER_SECOND 次」这条线。
     public static final int HARD_MAX_CONCURRENT = 3;
+
+    // ==================== 429 风控熔断 ====================
+    // 服务端在判定请求过于频繁时会返回 429。此时继续请求只会加重风控，
+    // 因此一旦检测到 429：立即中止本次扫描 + 进入 10 分钟冷却期。
+    public static final long COOLDOWN_MS = 10 * 60 * 1000L;  // 10 分钟
+    public static final String PREF_COOLDOWN_UNTIL = "cooldown_until";
+    // 保护 tripped429 的锁（静态，与静态字段配套）。
+    private static final Object TRIP_LOCK = new Object();
+    // 是否已检测到 429（本次运行内），用于让多线程并发时只记录一次。
+    private static volatile boolean tripped429 = false;
+    // 测试开关：置真后，下一次请求无论真实响应码是什么，一律按 429 处理。
+    // 仅用于验证熔断逻辑，不影响正常扫描。一次生效后自动复位。
+    private volatile boolean forceNext429 = false;
+
+    // 检测 429 并触发熔断。多线程并发下可能被多个线程同时调用，
+    // 用 synchronized + tripped429 保证只生效一次、冷却截止时间不被覆盖成更晚。
+    private void tripIf429(int code) {
+        if (code != 429) return;
+        synchronized (TRIP_LOCK) {
+            if (tripped429) return;
+            tripped429 = true;
+        }
+        long until = System.currentTimeMillis() + COOLDOWN_MS;
+        prefs.edit().putLong(PREF_COOLDOWN_UNTIL, until).apply();
+        running = false;   // 立即停止：单线程 for 条件与多线程任务判断都会读到
+        handler.post(new Runnable() {
+            public void run() {
+                appendResult("\n>>> 检测到 429（请求被限流），已强制停止 10 分钟 <<<\n");
+                appendResult(">>> 冷却截止：" + new java.text.SimpleDateFormat(
+                    "HH:mm:ss", Locale.US).format(new java.util.Date(until)) + "\n");
+                appendResult(">>> 冷却期内无法开始/续扫，请稍后再试\n");
+                textProgress.setText("已熔断，冷却 10 分钟");
+            }
+        });
+    }
+
+    // 返回剩余冷却毫秒数；<=0 表示不在冷却期。
+    private long cooldownRemainingMs() {
+        long until = prefs.getLong(PREF_COOLDOWN_UNTIL, 0L);
+        long left = until - System.currentTimeMillis();
+        return left > 0 ? left : 0;
+    }
+
 
     // ==================== 全局令牌闸门（唯一速率封顶点） ====================
     // 单线程与多线程共用同一把闸门：任何一次请求在发出前都必须先取得许可，
@@ -159,6 +203,23 @@ public class MainActivity extends Activity {
         btnRow.addView(btnClear, weight());
 
         root.addView(btnRow, mpwc());
+
+        // ==================== 【测试入口】429 熔断自测 ====================
+        // 真实服务端返回 429 是被风控的标志，不能为了测试去故意制造高频请求。
+        // 因此提供此按钮：点击后「武装」标志，使下一次请求无论真实响应如何都被
+        // 当作 429 处理，从而在不触发真实风控的前提下验证熔断/冷却是否生效。
+        btnTest429 = new Button(this);
+        btnTest429.setText("测试：下次请求强制 429");
+        btnTest429.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                forceNext429 = true;
+                appendResult("\n[测试] 已武装：下一次请求将被强制判定为 429\n");
+                Toast.makeText(MainActivity.this,
+                    "已武装，下次请求将模拟 429", Toast.LENGTH_SHORT).show();
+            }
+        });
+        root.addView(btnTest429, mpwc());
 
         LinearLayout prog = new LinearLayout(this);
         prog.setOrientation(LinearLayout.HORIZONTAL);
@@ -281,6 +342,22 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "扫描中", Toast.LENGTH_SHORT).show();
             return;
         }
+
+        // 429 熔断冷却检查：冷却期内一律拒绝启动（含续扫），
+        // 冷却时间戳持久化在 prefs，杀进程重启也无法绕过。
+        long left = cooldownRemainingMs();
+        if (left > 0) {
+            long sec = (left + 999) / 1000;
+            Toast.makeText(this,
+                "限流冷却中，还需 " + (sec / 60) + " 分 " + (sec % 60) + " 秒",
+                Toast.LENGTH_LONG).show();
+            appendResult(">>> 冷却中，无法开始（剩余 " + sec + " 秒）\n");
+            return;
+        }
+
+        // 新一轮扫描，复位熔断标志（否则一次熔断后永久无法再被熔断）
+        tripped429 = false;
+
         int s, e;
         if (resume) {
             // 续扫：从 prefs 读取下一个编号
@@ -446,6 +523,7 @@ public class MainActivity extends Activity {
             long userInterval = Math.max(interval, HARD_MIN_INTERVAL_MS);
             for (int n = s; n <= e && running; n++) {
                 acquireRatePermit();
+                if (!running) break;   // 取令牌期间可能已被 429 熔断，需再查一次
                 scanOne(n);
                 try {
                     if (userInterval > HARD_MIN_INTERVAL_MS) {
@@ -470,7 +548,11 @@ public class MainActivity extends Activity {
                         try {
                             if (running) {
                                 acquireRatePermit();
-                                scanOne(num);
+                                // 取令牌可能阻塞数百 ms，期间可能已被 429 熔断；
+                                // 再查一次以尽量减少熔断后仍然发出的请求。
+                                if (running) {
+                                    scanOne(num);
+                                }
                             }
                         } catch (Exception ex) {
                             ex.printStackTrace();
@@ -503,6 +585,15 @@ public class MainActivity extends Activity {
                     btnResume.setVisibility(View.GONE);
                     appendResult("=== 完成 ===\n");
                     textProgress.setText("完成");
+                } else if (tripped429) {
+                    // 因 429 熔断而中止：保存续扫点，便于冷却结束后继续，
+                    // 且不显示"完成"（避免误以为扫完了）。
+                    int cur = getCur();
+                    int end = getEnd();
+                    if (cur > 0 && cur <= end) {
+                        prefs.edit().putInt("resume_next", cur).putInt("resume_end", end).apply();
+                        btnResume.setVisibility(View.VISIBLE);
+                    }
                 }
                 // 结果已在 scanOne 中实时保存，无需再次保存
                 running = false;
@@ -732,8 +823,25 @@ public class MainActivity extends Activity {
             c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android)");
             c.setConnectTimeout(10000);
             c.setReadTimeout(10000);
-
             int code = c.getResponseCode();
+
+            // 【测试入口】若置了 forceNext429，则把本次响应强制当作 429，
+            // 用于在真实服务端未返回 429 的情况下验证熔断逻辑是否生效。
+            // 一次性生效：读取后立即复位，不会影响后续请求。
+            if (forceNext429) {
+                forceNext429 = false;
+                code = 429;
+            }
+
+            // 429 熔断：立即停止扫描并进入冷却期。放在写"错误 429"之前，
+            // 避免熔断本身被当成普通错误记入「其他」分类文件。
+            if (code == 429) {
+                tripIf429(code);
+                appendResult("编号 " + cn + "  错误 " + errorReason(code) + "（已触发熔断）\n");
+                updateProgress(num);
+                return;
+            }
+
             String loc = c.getHeaderField("Location");
             String ohc = c.getHeaderField("ohc-file-size");
             String model = "";
