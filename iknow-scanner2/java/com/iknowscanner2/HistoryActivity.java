@@ -266,6 +266,7 @@ public class HistoryActivity extends Activity {
             if (oldFiles != null) {
                 for (File file : oldFiles) {
                     BufferedReader reader = new BufferedReader(new FileReader(file));
+                    try {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         // 处理字面量 \\n（旧文件可能包含）
@@ -279,6 +280,13 @@ public class HistoryActivity extends Activity {
                         }
                     }
                     reader.close();
+                    } finally {
+                        // 【防泄漏】若上面的 readLine/processLine 抛异常，第 281 行的 close()
+                        // 会被跳过，导致文件句柄泄漏、后续文件无法读取。
+                        // 这里补一次关闭（BufferedReader.close() 可重复调用，无副作用）。
+                        // 原有代码一行未删，仅新增本 try/finally 包裹。
+                        try { reader.close(); } catch (Exception ignored) {}
+                    }
                 }
             }
         } catch (Exception e) {
