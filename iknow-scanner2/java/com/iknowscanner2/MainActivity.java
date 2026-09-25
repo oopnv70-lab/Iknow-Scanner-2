@@ -62,6 +62,25 @@ public class MainActivity extends Activity {
     // 因此并发调大不会突破「每秒 HARD_MAX_REQUESTS_PER_SECOND 次」这条线。
     public static final int HARD_MAX_CONCURRENT = 3;
 
+    // ==================== 界面文字常量（改文案只改这里） ====================
+    // buildUI() 里原先直接写死的界面文案，集中到这里。
+    // 目的：改文案时不必翻 168 行的 buildUI()，只改本区块即可。
+    // 注意：值与改动前完全一致，仅做「字面量 -> 命名常量」的等价替换。
+    public static final String TXT_APP_TITLE = "Iknow Scanner 2";
+    public static final String TXT_LABEL_START = "起始编号";
+    public static final String TXT_LABEL_END = "结束编号";
+    public static final String TXT_HINT_START = "例如 1";
+    public static final String TXT_HINT_END = "例如 100";
+    public static final String TXT_BTN_START = "开始";
+    public static final String TXT_BTN_RESUME = "续扫";
+    public static final String TXT_BTN_STOP = "停止";
+    public static final String TXT_BTN_CLEAR = "清空";
+    public static final String TXT_BTN_SAVE_FORBIDDEN = "保存高维禁用";
+    public static final String TXT_BTN_TEST_429 = "测试：下次请求强制 429";
+    public static final String TXT_STATUS_READY = "就绪";
+    public static final String TXT_HIT_PREFIX = "命中: ";
+    public static final String TXT_RESULT_WAITING = "等待扫描...";
+
     // ==================== 429 风控熔断 ====================
     // 服务端在判定请求过于频繁时会返回 429。此时继续请求只会加重风控，
     // 因此一旦检测到 429：立即中止本次扫描 + 进入 10 分钟冷却期。
@@ -144,31 +163,31 @@ public class MainActivity extends Activity {
         rootLp.setMargins(0, 220, 0, 0);
 
         TextView title = new TextView(this);
-        title.setText("Iknow Scanner 2");
+        title.setText(TXT_APP_TITLE);
         title.setTextSize(22);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setPadding(0, 0, 0, 12);
         root.addView(title);
 
         TextView lab1 = new TextView(this);
-        lab1.setText("起始编号");
+        lab1.setText(TXT_LABEL_START);
         lab1.setTextSize(13);
         root.addView(lab1);
 
         editStart = new EditText(this);
-        editStart.setHint("例如 1");
+        editStart.setHint(TXT_HINT_START);
         editStart.setSingleLine(true);
         editStart.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         root.addView(editStart, mpwc());
 
         TextView lab2 = new TextView(this);
-        lab2.setText("结束编号");
+        lab2.setText(TXT_LABEL_END);
         lab2.setTextSize(13);
         lab2.setPadding(0, 8, 0, 0);
         root.addView(lab2);
 
         editEnd = new EditText(this);
-        editEnd.setHint("例如 100");
+        editEnd.setHint(TXT_HINT_END);
         editEnd.setSingleLine(true);
         editEnd.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         root.addView(editEnd, mpwc());
@@ -178,28 +197,28 @@ public class MainActivity extends Activity {
         btnRow.setPadding(0, 12, 0, 0);
 
         btnStart = new Button(this);
-        btnStart.setText("开始");
+        btnStart.setText(TXT_BTN_START);
         btnRow.addView(btnStart, weight());
 
         btnResume = new Button(this);
-        btnResume.setText("续扫");
+        btnResume.setText(TXT_BTN_RESUME);
         btnResume.setVisibility(View.GONE);
         btnRow.addView(btnResume, weight());
         // 【已屏蔽】「保存高维禁用」按钮不再显示（功能已废弃，扫描结果会实时自动分类保存）。
         // 按钮对象仍创建，仅为兼容下方 setEnabled 调用；不加入布局，故 UI 上不可见、不占宽度。
         btnSaveForbidden = new Button(this);
-        btnSaveForbidden.setText("保存高维禁用");
+        btnSaveForbidden.setText(TXT_BTN_SAVE_FORBIDDEN);
         btnSaveForbidden.setEnabled(false);
         btnSaveForbidden.setVisibility(View.GONE);
         // btnRow.addView(btnSaveForbidden, weight());  // 屏蔽入口：不再添加到按钮行
 
 
         btnStop = new Button(this);
-        btnStop.setText("停止");
+        btnStop.setText(TXT_BTN_STOP);
         btnRow.addView(btnStop, weight());
 
         btnClear = new Button(this);
-        btnClear.setText("清空");
+        btnClear.setText(TXT_BTN_CLEAR);
         btnRow.addView(btnClear, weight());
 
         root.addView(btnRow, mpwc());
@@ -209,7 +228,7 @@ public class MainActivity extends Activity {
         // 因此提供此按钮：点击后「武装」标志，使下一次请求无论真实响应如何都被
         // 当作 429 处理，从而在不触发真实风控的前提下验证熔断/冷却是否生效。
         btnTest429 = new Button(this);
-        btnTest429.setText("测试：下次请求强制 429");
+        btnTest429.setText(TXT_BTN_TEST_429);
         btnTest429.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -226,12 +245,12 @@ public class MainActivity extends Activity {
         prog.setPadding(0, 10, 0, 8);
 
         textProgress = new TextView(this);
-        textProgress.setText("就绪");
+        textProgress.setText(TXT_STATUS_READY);
         textProgress.setTextSize(13);
         prog.addView(textProgress, weight());
 
         textHitCount = new TextView(this);
-        textHitCount.setText("命中: 0");
+        textHitCount.setText(TXT_HIT_PREFIX + "0");
         textHitCount.setTextSize(13);
         textHitCount.setTextColor(0xFFE65100);
         prog.addView(textHitCount);
@@ -245,7 +264,7 @@ public class MainActivity extends Activity {
 
         resultScroll = new ScrollView(this);
         textResult = new TextView(this);
-        textResult.setText("等待扫描...");
+        textResult.setText(TXT_RESULT_WAITING);
         textResult.setTextSize(10);
         textResult.setTypeface(Typeface.MONOSPACE);
         textResult.setPadding(0, 8, 0, 8);
@@ -427,9 +446,9 @@ public class MainActivity extends Activity {
         running = false;
         resultBuilder.setLength(0);
         hitCount.set(0);
-        textResult.setText("等待扫描...");
-        textProgress.setText("就绪");
-        textHitCount.setText("命中: 0");
+        textResult.setText(TXT_RESULT_WAITING);
+        textProgress.setText(TXT_STATUS_READY);
+        textHitCount.setText(TXT_HIT_PREFIX + "0");
         btnStart.setEnabled(true);
         btnResume.setVisibility(View.GONE);
         prefs.edit().remove("resume_next").remove("resume_end").apply();
@@ -970,7 +989,7 @@ public class MainActivity extends Activity {
         handler.post(new Runnable() {
             public void run() {
                 textProgress.setText(fmt(cur));
-                textHitCount.setText("命中: " + hitCount.get());
+                textHitCount.setText(TXT_HIT_PREFIX + hitCount.get());
             }
         });
     }
