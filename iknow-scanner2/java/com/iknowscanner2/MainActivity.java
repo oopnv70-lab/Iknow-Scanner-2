@@ -23,11 +23,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class MainActivity extends Activity {
-    private EditText editStart, editEnd;
-    private Button btnStart, btnStop, btnClear, btnResume, btnSaveForbidden;
-    private Button btnTest429;   // 【测试入口】武装「下次请求强制 429」，用于验证熔断
-    private TextView textProgress, textHitCount, textResult;
-    private ScrollView resultScroll;
+    // UI 控件已全部搬到 MainScreen（UI 独立化），此处只保留屏幕对象与进度状态。
+    private MainScreen screen;
+    private int curProgress = 0;
     private volatile boolean running = false;
     private java.util.concurrent.atomic.AtomicInteger hitCount = new java.util.concurrent.atomic.AtomicInteger(0);
     private final StringBuilder resultBuilder = new StringBuilder();
@@ -111,7 +109,8 @@ public class MainActivity extends Activity {
                 appendResult(">>> 冷却截止：" + new java.text.SimpleDateFormat(
                     "HH:mm:ss", Locale.US).format(new java.util.Date(until)) + "\n");
                 appendResult(">>> 冷却期内无法开始/续扫，请稍后再试\n");
-                textProgress.setText("已熔断，冷却 10 分钟");
+                curProgress = 0;
+screen.setProgressText("已熔断，冷却 10 分钟");
             }
         });
     }
@@ -151,173 +150,25 @@ public class MainActivity extends Activity {
     }
 
     private void buildUI() {
-        FrameLayout screen = new FrameLayout(this);
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(24, 0, 24, 16);
-
-        FrameLayout.LayoutParams rootLp = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT);
-        rootLp.setMargins(0, 220, 0, 0);
-
-        TextView title = new TextView(this);
-        title.setText(TXT_APP_TITLE);
-        title.setTextSize(22);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setPadding(0, 0, 0, 12);
-        root.addView(title);
-
-        TextView lab1 = new TextView(this);
-        lab1.setText(TXT_LABEL_START);
-        lab1.setTextSize(13);
-        root.addView(lab1);
-
-        editStart = new EditText(this);
-        editStart.setHint(TXT_HINT_START);
-        editStart.setSingleLine(true);
-        editStart.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        root.addView(editStart, mpwc());
-
-        TextView lab2 = new TextView(this);
-        lab2.setText(TXT_LABEL_END);
-        lab2.setTextSize(13);
-        lab2.setPadding(0, 8, 0, 0);
-        root.addView(lab2);
-
-        editEnd = new EditText(this);
-        editEnd.setHint(TXT_HINT_END);
-        editEnd.setSingleLine(true);
-        editEnd.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        root.addView(editEnd, mpwc());
-
-        LinearLayout btnRow = new LinearLayout(this);
-        btnRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnRow.setPadding(0, 12, 0, 0);
-
-        btnStart = new Button(this);
-        btnStart.setText(TXT_BTN_START);
-        btnRow.addView(btnStart, weight());
-
-        btnResume = new Button(this);
-        btnResume.setText(TXT_BTN_RESUME);
-        btnResume.setVisibility(View.GONE);
-        btnRow.addView(btnResume, weight());
-        // 【已屏蔽】「保存高维禁用」按钮不再显示（功能已废弃，扫描结果会实时自动分类保存）。
-        // 按钮对象仍创建，仅为兼容下方 setEnabled 调用；不加入布局，故 UI 上不可见、不占宽度。
-        btnSaveForbidden = new Button(this);
-        btnSaveForbidden.setText(TXT_BTN_SAVE_FORBIDDEN);
-        btnSaveForbidden.setEnabled(false);
-        btnSaveForbidden.setVisibility(View.GONE);
-        // btnRow.addView(btnSaveForbidden, weight());  // 屏蔽入口：不再添加到按钮行
-
-
-        btnStop = new Button(this);
-        btnStop.setText(TXT_BTN_STOP);
-        btnRow.addView(btnStop, weight());
-
-        btnClear = new Button(this);
-        btnClear.setText(TXT_BTN_CLEAR);
-        btnRow.addView(btnClear, weight());
-
-        root.addView(btnRow, mpwc());
-
-        // ==================== 【测试入口】429 熔断自测 ====================
-        // 真实服务端返回 429 是被风控的标志，不能为了测试去故意制造高频请求。
-        // 因此提供此按钮：点击后「武装」标志，使下一次请求无论真实响应如何都被
-        // 当作 429 处理，从而在不触发真实风控的前提下验证熔断/冷却是否生效。
-        btnTest429 = new Button(this);
-        btnTest429.setText(TXT_BTN_TEST_429);
-        btnTest429.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                forceNext429 = true;
-                appendResult("\n[测试] 已武装：下一次请求将被强制判定为 429\n");
-                Toast.makeText(MainActivity.this,
-                    "已武装，下次请求将模拟 429", Toast.LENGTH_SHORT).show();
-            }
-        });
-        root.addView(btnTest429, mpwc());
-
-        LinearLayout prog = new LinearLayout(this);
-        prog.setOrientation(LinearLayout.HORIZONTAL);
-        prog.setPadding(0, 10, 0, 8);
-
-        textProgress = new TextView(this);
-        textProgress.setText(TXT_STATUS_READY);
-        textProgress.setTextSize(13);
-        prog.addView(textProgress, weight());
-
-        textHitCount = new TextView(this);
-        textHitCount.setText(TXT_HIT_PREFIX + "0");
-        textHitCount.setTextSize(13);
-        textHitCount.setTextColor(0xFFE65100);
-        prog.addView(textHitCount);
-
-        root.addView(prog, mpwc());
-
-        View line = new View(this);
-        line.setBackgroundColor(0xFFCCCCCC);
-        root.addView(line, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 1));
-
-        resultScroll = new ScrollView(this);
-        textResult = new TextView(this);
-        textResult.setText(TXT_RESULT_WAITING);
-        textResult.setTextSize(10);
-        textResult.setTypeface(Typeface.MONOSPACE);
-        textResult.setPadding(0, 8, 0, 8);
-        resultScroll.addView(textResult);
-        root.addView(resultScroll, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        screen.addView(root, rootLp);
-
-        // 添加右上角三个点菜单
-        ImageButton menuBtn = new ImageButton(this);
-        menuBtn.setImageResource(android.R.drawable.ic_menu_more); // 系统图标
-        menuBtn.setBackgroundColor(0x00000000); // 透明背景
-        menuBtn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        
-        FrameLayout.LayoutParams menuLp = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.END | Gravity.TOP);
-        menuLp.setMargins(0, 80, 16, 0); // 往下移
-        screen.addView(menuBtn, menuLp);
-
-        menuBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showSettingsMenu(v);
-            }
-        });
-
-        btnStart.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { startScan(false); }
-        });
-        btnResume.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { startScan(true); }
-        });
-        btnStop.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { stopScan(); }
-        });
-        btnClear.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { clearResult(); }
-        });
-        btnSaveForbidden.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { saveForbidden(); }
-        });
-
+        screen = new MainScreen();
         int end = prefs.getInt("resume_end", -1);
         int next = prefs.getInt("resume_next", -1);
-        if (end >= 0 && next >= 0 && next <= end) {
-            editStart.setText(String.valueOf(next));
-            editEnd.setText(String.valueOf(end));
-            btnResume.setVisibility(View.VISIBLE);
-        }
-        setContentView(screen);
+        screen.build(this, uiListener, next, end);
     }
+
+    private final MainScreen.Listener uiListener = new MainScreen.Listener() {
+        public void onStart(boolean resume) { startScan(resume); }
+        public void onStop() { stopScan(); }
+        public void onClear() { clearResult(); }
+        public void onSettings(View anchor) { showSettingsMenu(anchor); }
+        public void onTest429() {
+            forceNext429 = true;
+            appendResult("
+[测试] 已武装：下一次请求将被强制判定为 429
+");
+        }
+        public void onSaveForbidden() { saveForbidden(); }
+    };
 
     private void showSettingsMenu(View anchor) {
         android.widget.PopupMenu popup = new android.widget.PopupMenu(this, anchor);
@@ -388,8 +239,8 @@ public class MainActivity extends Activity {
             }
         } else {
             // 新扫描：从编辑框读取
-            String ss = editStart.getText().toString().trim();
-            String se = editEnd.getText().toString().trim();
+            String ss = screen.getStartText();
+            String se = screen.getEndText();
             if (ss.length() == 0 || se.length() == 0) {
                 Toast.makeText(this, "请输入范围", Toast.LENGTH_SHORT).show();
                 return;
@@ -409,9 +260,9 @@ public class MainActivity extends Activity {
         }
 
         running = true;
-        btnStart.setEnabled(false);
-        btnSaveForbidden.setEnabled(false);
-        btnResume.setVisibility(View.GONE);
+        screen.setStartEnabled(false);
+        screen.setSaveForbiddenEnabled(false);
+        screen.setResumeVisible(false);
 
         if (!resume) {
             prefs.edit().remove("resume_next").remove("resume_end").apply();
@@ -429,14 +280,14 @@ public class MainActivity extends Activity {
 
     private void stopScan() {
         running = false;
-        btnStart.setEnabled(true);
-        btnSaveForbidden.setEnabled(true);
+        screen.setStartEnabled(true);
+        screen.setSaveForbiddenEnabled(true);
         int cur = getCur();
         int end = getEnd();
         if (cur > 0 && cur <= end) {
             prefs.edit().putInt("resume_next", cur).putInt("resume_end", end).apply();
             appendResult(">>> 已停止 @" + fmt(cur) + "，点续扫继续\n");
-            btnResume.setVisibility(View.VISIBLE);
+            screen.setResumeVisible(true);
         } else {
             appendResult(">>> 已停止\n");
         }
@@ -446,11 +297,12 @@ public class MainActivity extends Activity {
         running = false;
         resultBuilder.setLength(0);
         hitCount.set(0);
-        textResult.setText(TXT_RESULT_WAITING);
-        textProgress.setText(TXT_STATUS_READY);
-        textHitCount.setText(TXT_HIT_PREFIX + "0");
-        btnStart.setEnabled(true);
-        btnResume.setVisibility(View.GONE);
+        screen.setResultText(TXT_RESULT_WAITING);
+        curProgress = 0;
+screen.setProgressText(TXT_STATUS_READY);
+        screen.setHitCount(TXT_HIT_PREFIX + "0");
+        screen.setStartEnabled(true);
+        screen.setResumeVisible(false);
         prefs.edit().remove("resume_next").remove("resume_end").apply();
     }
 
@@ -497,20 +349,12 @@ public class MainActivity extends Activity {
     }
 
     private int getCur() {
-        String p = textProgress.getText().toString();
-        if (p.startsWith("W000")) {
-            try {
-                String n = p.substring(4);
-                if (n.contains(" ")) n = n.substring(0, n.indexOf(" "));
-                return Integer.parseInt(n);
-            } catch (Exception ignored) {}
-        }
-        return 0;
+        return curProgress;
     }
 
     private int getEnd() {
         try {
-            return Integer.parseInt(editEnd.getText().toString().trim());
+            return Integer.parseInt(screen.getEndText());
         } catch (Exception e) {
             return 0;
         }
@@ -597,13 +441,14 @@ public class MainActivity extends Activity {
         
         handler.post(new Runnable() {
             public void run() {
-                btnStart.setEnabled(true);
-                btnSaveForbidden.setEnabled(true);
+                screen.setStartEnabled(true);
+                screen.setSaveForbiddenEnabled(true);
                 if (running) {
                     prefs.edit().remove("resume_next").remove("resume_end").apply();
-                    btnResume.setVisibility(View.GONE);
+                    screen.setResumeVisible(false);
                     appendResult("=== 完成 ===\n");
-                    textProgress.setText("完成");
+                    curProgress = 0;
+screen.setProgressText("完成");
                 } else if (tripped429) {
                     // 因 429 熔断而中止：保存续扫点，便于冷却结束后继续，
                     // 且不显示"完成"（避免误以为扫完了）。
@@ -611,7 +456,7 @@ public class MainActivity extends Activity {
                     int end = getEnd();
                     if (cur > 0 && cur <= end) {
                         prefs.edit().putInt("resume_next", cur).putInt("resume_end", end).apply();
-                        btnResume.setVisibility(View.VISIBLE);
+                        screen.setResumeVisible(true);
                     }
                 }
                 // 结果已在 scanOne 中实时保存，无需再次保存
@@ -974,8 +819,9 @@ public class MainActivity extends Activity {
     private void updateProgress(final int cur) {
         handler.post(new Runnable() {
             public void run() {
-                textProgress.setText(fmt(cur));
-                textHitCount.setText(TXT_HIT_PREFIX + hitCount.get());
+                curProgress = cur;
+screen.setProgressText(fmt(cur));
+                screen.setHitCount(TXT_HIT_PREFIX + hitCount.get());
             }
         });
     }
@@ -993,10 +839,7 @@ public class MainActivity extends Activity {
                     resultBuilder.setLength(0);
                     resultBuilder.append(t);
                 }
-                textResult.setText(resultBuilder.toString());
-                resultScroll.post(new Runnable() {
-                    public void run() { resultScroll.fullScroll(View.FOCUS_DOWN); }
-                });
+                screen.appendAndScroll(resultBuilder.toString());
             }
         });
     }
