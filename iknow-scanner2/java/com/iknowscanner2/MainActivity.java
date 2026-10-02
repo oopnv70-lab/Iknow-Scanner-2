@@ -625,21 +625,7 @@ public class MainActivity extends Activity {
             if (dir == null) return;
             if (!dir.exists()) dir.mkdirs();
             
-            String filename;
-            switch (category) {
-                case "普通机型":
-                    filename = "普通机型.txt";
-                    break;
-                case "高维禁用":
-                    filename = "高维禁用.txt";
-                    break;
-                case "高维禁用海外版":
-                    filename = "高维禁用海外版.txt";
-                    break;
-                default:
-                    filename = "其他.txt";
-                    break;
-            }
+            String filename = FirmwareCategory.fileNameFor(category);
             
             java.io.File file = new java.io.File(dir, filename);
             
@@ -739,7 +725,7 @@ public class MainActivity extends Activity {
                 }
                 
                 // 分类
-                String category = categorizeLine(line);
+                String category = FirmwareCategory.categorize(line);
                 android.util.Log.d("IknowScanner", "saveScanResult line: [" + line + "] category: " + category);
                 switch (category) {
                     case "普通机型":
@@ -900,7 +886,7 @@ public class MainActivity extends Activity {
             if (found) {
                 hitCount.incrementAndGet();
                 // 实时分类并保存到文件
-                String category = categorizeLine(line);
+                String category = FirmwareCategory.categorize(line);
                 saveLineToFile(line, category);
             }
             updateProgress(num);
