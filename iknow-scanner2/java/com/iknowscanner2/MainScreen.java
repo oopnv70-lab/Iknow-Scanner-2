@@ -22,13 +22,11 @@ public final class MainScreen {
         void onStop();
         void onClear();
         void onSettings(View anchor);
-        void onTest429();
         void onSaveForbidden();
     }
 
     private EditText editStart, editEnd;
     private Button btnStart, btnStop, btnClear, btnResume, btnSaveForbidden;
-    private Button btnTest429;
     private TextView textProgress, textHitCount, textResult;
     private ScrollView resultScroll;
 
@@ -106,21 +104,6 @@ public final class MainScreen {
 
         root.addView(btnRow, mpwc());
 
-        // ==================== 【测试入口】429 熔断自测 ====================
-        // 真实服务端返回 429 是被风控的标志，不能为了测试去故意制造高频请求。
-        // 因此提供此按钮：点击后「武装」标志，使下一次请求无论真实响应如何都被
-        // 当作 429 处理，从而在不触发真实风控的前提下验证熔断/冷却是否生效。
-        btnTest429 = new Button(a);
-        btnTest429.setText(MainActivity.TXT_BTN_TEST_429);
-        btnTest429.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                l.onTest429();
-                Toast.makeText(a,
-                    "已武装，下次请求将模拟 429", Toast.LENGTH_SHORT).show();
-            }
-        });
-        root.addView(btnTest429, mpwc());
 
         LinearLayout prog = new LinearLayout(a);
         prog.setOrientation(LinearLayout.HORIZONTAL);

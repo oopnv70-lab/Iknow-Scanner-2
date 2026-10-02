@@ -70,7 +70,6 @@ public class MainActivity extends Activity {
     public static final String TXT_BTN_STOP = "停止";
     public static final String TXT_BTN_CLEAR = "清空";
     public static final String TXT_BTN_SAVE_FORBIDDEN = "保存高维禁用";
-    public static final String TXT_BTN_TEST_429 = "测试：下次请求强制 429";
     public static final String TXT_STATUS_READY = "就绪";
     public static final String TXT_HIT_PREFIX = "命中: ";
     public static final String TXT_RESULT_WAITING = "等待扫描...";
@@ -84,9 +83,6 @@ public class MainActivity extends Activity {
     private static final Object TRIP_LOCK = new Object();
     // 是否已检测到 429（本次运行内），用于让多线程并发时只记录一次。
     private static volatile boolean tripped429 = false;
-    // 测试开关：置真后，下一次请求无论真实响应码是什么，一律按 429 处理。
-    // 仅用于验证熔断逻辑，不影响正常扫描。一次生效后自动复位。
-    private volatile boolean forceNext429 = false;
 
     // 检测 429 并触发熔断。多线程并发下可能被多个线程同时调用，
     // 用 synchronized + tripped429 保证只生效一次、冷却截止时间不被覆盖成更晚。
@@ -119,10 +115,6 @@ public class MainActivity extends Activity {
         public void onStop() { scanner.stop(); }
         public void onClear() { clearResult(); }
         public void onSettings(View anchor) { showSettingsMenu(anchor); }
-        public void onTest429() {
-            scanner.armTest429();
-            scanner.append("\n[测试] 已武装：下一次请求将被强制判定为 429\n");
-        }
         public void onSaveForbidden() { saveForbidden(); }
     };
 

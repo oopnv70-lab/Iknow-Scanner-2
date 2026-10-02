@@ -31,7 +31,6 @@ public final class Scanner {
 
     private static final Object TRIP_LOCK = new Object();
     private static volatile boolean tripped429 = false;
-    private volatile boolean forceNext429 = false;
 
     private static final Object RATE_LOCK = new Object();
     private static long nextPermitMs = 0L;
@@ -55,7 +54,6 @@ public final class Scanner {
 
     public String getResult() { return resultBuilder.toString(); }
 
-    public void armTest429() { forceNext429 = true; }
     public void append(String s) { appendResult(s); }
 
 
@@ -519,13 +517,6 @@ public final class Scanner {
             c.setReadTimeout(10000);
             int code = c.getResponseCode();
 
-            // 【测试入口】若置了 forceNext429，则把本次响应强制当作 429，
-            // 用于在真实服务端未返回 429 的情况下验证熔断逻辑是否生效。
-            // 一次性生效：读取后立即复位，不会影响后续请求。
-            if (forceNext429) {
-                forceNext429 = false;
-                code = 429;
-            }
 
             // 429 熔断：立即停止扫描并进入冷却期。放在写"错误 429"之前，
             // 避免熔断本身被当成普通错误记入「其他」分类文件。
