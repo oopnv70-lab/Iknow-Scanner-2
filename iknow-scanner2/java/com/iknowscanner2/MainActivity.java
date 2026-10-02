@@ -3,24 +3,9 @@ package com.iknowscanner2;
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.graphics.Typeface;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.util.Base64;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.Gravity;
 import android.widget.*;
-import java.io.IOException;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.util.zip.GZIPInputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MainActivity extends Activity {
     // UI 控件已全部搬到 MainScreen（UI 独立化），此处只保留屏幕对象与进度状态。
@@ -79,20 +64,7 @@ public class MainActivity extends Activity {
     // 因此一旦检测到 429：立即中止本次扫描 + 进入 10 分钟冷却期。
     public static final long COOLDOWN_MS = 10 * 60 * 1000L;  // 10 分钟
     public static final String PREF_COOLDOWN_UNTIL = "cooldown_until";
-    // 保护 tripped429 的锁（静态，与静态字段配套）。
-    private static final Object TRIP_LOCK = new Object();
-    // 是否已检测到 429（本次运行内），用于让多线程并发时只记录一次。
-    private static volatile boolean tripped429 = false;
 
-    // 检测 429 并触发熔断。多线程并发下可能被多个线程同时调用，
-    // 用 synchronized + tripped429 保证只生效一次、冷却截止时间不被覆盖成更晚。
-    // 返回剩余冷却毫秒数；<=0 表示不在冷却期。
-    // ==================== 全局令牌闸门（唯一速率封顶点） ====================
-    // 单线程与多线程共用同一把闸门：任何一次请求在发出前都必须先取得许可，
-    // 相邻两次许可之间强制间隔 >= HARD_MIN_INTERVAL_MS。
-    // 这样无论并发填几，整体速率恒 <= HARD_MAX_REQUESTS_PER_SECOND 次/秒。
-    private static final Object RATE_LOCK = new Object();
-    private static long nextPermitMs = 0L;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -199,9 +171,6 @@ public class MainActivity extends Activity {
     }
 
 
-    // 查询四个分类文件中是否已存在指定 W 编号，存在则返回该行的型号+版本部分，否则返回 null
-    // 统一的编号提取：兼容「W00012345  ...」裸格式和「编号 W00012345 型号 ...」带标签格式
-    // 将 HTTP 状态码翻译成可读的错误原因
     @Override
     protected void onDestroy() {
         super.onDestroy();
