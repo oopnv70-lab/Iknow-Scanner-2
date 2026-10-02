@@ -8,6 +8,7 @@ import android.util.Base64;
 import android.widget.Toast;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.zip.GZIPInputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -74,7 +75,7 @@ public final class Scanner {
                     "HH:mm:ss", Locale.US).format(new java.util.Date(until)) + "\n");
                 appendResult(">>> 冷却期内无法开始/续扫，请稍后再试\n");
                 curProgress = 0;
-                this.screen.setProgressText("已熔断，冷却 10 分钟");
+                screen.setProgressText("已熔断，冷却 10 分钟");
             }
         });
     }
@@ -283,22 +284,22 @@ public final class Scanner {
         
         handler.post(new Runnable() {
             public void run() {
-                this.screen.setStartEnabled(true);
-                this.screen.setSaveForbiddenEnabled(true);
+                screen.setStartEnabled(true);
+                screen.setSaveForbiddenEnabled(true);
                 if (running) {
-                    this.prefs.edit().remove("resume_next").remove("resume_end").apply();
-                    this.screen.setResumeVisible(false);
+                    prefs.edit().remove("resume_next").remove("resume_end").apply();
+                    screen.setResumeVisible(false);
                     appendResult("=== 完成 ===\n");
                     curProgress = 0;
-                this.screen.setProgressText("完成");
+                screen.setProgressText("完成");
                 } else if (tripped429) {
                     // 因 429 熔断而中止：保存续扫点，便于冷却结束后继续，
                     // 且不显示"完成"（避免误以为扫完了）。
                     int cur = getCur();
                     int end = getEnd();
                     if (cur > 0 && cur <= end) {
-                        this.prefs.edit().putInt("resume_next", cur).putInt("resume_end", end).apply();
-                        this.screen.setResumeVisible(true);
+                        prefs.edit().putInt("resume_next", cur).putInt("resume_end", end).apply();
+                        screen.setResumeVisible(true);
                     }
                 }
                 // 结果已在 scanOne 中实时保存，无需再次保存
@@ -662,8 +663,8 @@ public final class Scanner {
         handler.post(new Runnable() {
             public void run() {
                 curProgress = cur;
-                this.screen.setProgressText(fmt(cur));
-                this.screen.setHitCount(MainActivity.TXT_HIT_PREFIX + hitCount.get());
+                screen.setProgressText(fmt(cur));
+                screen.setHitCount(MainActivity.TXT_HIT_PREFIX + hitCount.get());
             }
         });
     }
@@ -681,7 +682,7 @@ public final class Scanner {
                     resultBuilder.setLength(0);
                     resultBuilder.append(t);
                 }
-                this.screen.appendAndScroll(resultBuilder.toString());
+                screen.appendAndScroll(resultBuilder.toString());
             }
         });
     }
