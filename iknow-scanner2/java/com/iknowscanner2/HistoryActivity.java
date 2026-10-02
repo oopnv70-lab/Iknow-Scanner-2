@@ -16,13 +16,9 @@ public class HistoryActivity extends Activity {
     public static final int CATEGORY_FORBIDDEN_ENG = 2;
     public static final int CATEGORY_OTHER = 3;
 
-    public static final String[] CATEGORY_NAMES = {
-        "普通机型", "高维禁用", "高维禁用海外版", "其他"
-    };
+    public static final String[] CATEGORY_NAMES = FirmwareCategory.NAMES;
 
-    public static final String[] CATEGORY_FILES = {
-        "普通机型.txt", "高维禁用.txt", "高维禁用海外版.txt", "其他.txt"
-    };
+    public static final String[] CATEGORY_FILES = FirmwareCategory.FILES;
 
     private final int[] counts = new int[4];
     private LinearLayout listContainer;

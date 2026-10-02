@@ -863,7 +863,7 @@ public class MainActivity extends Activity {
                 String reason = errorReason(code);
                 appendResult("编号 " + cn + "  错误 " + reason + "\n\n");
                 // 保存到「其他」分类
-                saveLineToFile("编号 " + cn + "  错误 " + reason, "其他");
+                saveLineToFile("编号 " + cn + "  错误 " + reason, FirmwareCategory.CAT_OTHER);
                 updateProgress(num);
                 return;
             }
@@ -894,7 +894,7 @@ public class MainActivity extends Activity {
         } catch (IOException ex) {
             // 网络错误：显示原因并保存到「其他」
             appendResult("编号 " + cn + "  错误 网络错误(" + ex.getClass().getSimpleName() + ")\n\n");
-            saveLineToFile("编号 " + cn + "  错误 网络错误", "其他");
+            saveLineToFile("编号 " + cn + "  错误 网络错误", FirmwareCategory.CAT_OTHER);
             updateProgress(num);
         } finally {
             if (c != null) c.disconnect();
@@ -907,7 +907,7 @@ public class MainActivity extends Activity {
             java.io.File dir = getExternalFilesDir(null);
             if (dir == null || !dir.exists()) return null;
 
-            String[] filenames = {"普通机型.txt", "高维禁用.txt", "高维禁用海外版.txt", "其他.txt"};
+            String[] filenames = FirmwareCategory.FILES;
             for (String filename : filenames) {
                 java.io.File file = new java.io.File(dir, filename);
                 if (!file.exists()) continue;
