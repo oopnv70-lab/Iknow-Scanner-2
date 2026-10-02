@@ -163,9 +163,7 @@ screen.setProgressText("已熔断，冷却 10 分钟");
         public void onSettings(View anchor) { showSettingsMenu(anchor); }
         public void onTest429() {
             forceNext429 = true;
-            appendResult("
-[测试] 已武装：下一次请求将被强制判定为 429
-");
+            appendResult("\n[测试] 已武装：下一次请求将被强制判定为 429\n");
         }
         public void onSaveForbidden() { saveForbidden(); }
     };
