@@ -70,6 +70,10 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         prefs = getSharedPreferences("iknow_scan2", Context.MODE_PRIVATE);
+        // 日志开关存于「settings」prefs（与设置页一致），此处读初值同步到静态状态。
+        android.content.SharedPreferences settingsPrefs =
+            getSharedPreferences("settings", Context.MODE_PRIVATE);
+        Log.setOn(settingsPrefs.getBoolean("log_enabled", false));
         buildUI();
     }
 

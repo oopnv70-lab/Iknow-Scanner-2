@@ -220,6 +220,9 @@ public final class Scanner {
         if (concurrent < 1) {
             concurrent = 1;
         }
+
+        if (Log.on()) Log.add("[范围] " + fmt(s) + " → " + fmt(e)
+            + " 并发=" + concurrent + " 间隔=" + interval + "ms");
         // 说明：单线程模式下每轮为 scanOne(n) + sleep(interval)，实际周期 = 网络耗时 + interval，
         // 恒 >= MainActivity.HARD_MIN_INTERVAL_MS，因此任意 1 秒窗口内请求数必然 <= MainActivity.HARD_MAX_REQUESTS_PER_SECOND。
 
@@ -500,17 +503,21 @@ public final class Scanner {
 
     private void scanOne(int num) {
         String cn = fmt(num);
+        if (Log.on()) Log.add("[请求] " + cn + " 开始");
 
         // 请求前先查本地是否已存在该编号，存在则跳过请求
         String existing = findExistingLine(cn);
         if (existing != null) {
             // 本地已存在该编号，跳过请求，显示「编号 已保存」
+            if (Log.on()) Log.add("[跳过] " + cn + " 已存在，跳过请求");
             appendResult(cn + "  已保存\n");
             updateProgress(num);
             return;
         }
 
         HttpURLConnection c = null;
+        if (Log.on()) Log.add("[HTTP] GET " + MainActivity.BASE_URL + cn);
+        long t0 = System.currentTimeMillis();
         try {
             c = (HttpURLConnection) new URL(MainActivity.BASE_URL + cn).openConnection();
             c.setInstanceFollowRedirects(false);
@@ -519,12 +526,14 @@ public final class Scanner {
             c.setConnectTimeout(10000);
             c.setReadTimeout(10000);
             int code = c.getResponseCode();
+            if (Log.on()) Log.add("[响应] " + cn + " code=" + code + " 耗时=" + (System.currentTimeMillis() - t0) + "ms");
 
 
             // 429 熔断：立即停止扫描并进入冷却期。放在写"错误 429"之前，
             // 避免熔断本身被当成普通错误记入「其他」分类文件。
             if (code == 429) {
                 tripIf429(code);
+                if (Log.on()) Log.add("[熔断] " + cn + " 429，已触发熔断");
                 appendResult("编号 " + cn + "  错误 " + errorReason(code) + "（已触发熔断）\n");
                 updateProgress(num);
                 return;
@@ -544,6 +553,7 @@ public final class Scanner {
             boolean success = (code >= 200 && code < 300);
             if (!redirect && !success) {
                 String reason = errorReason(code);
+                if (Log.on()) Log.add("[错误] " + cn + " " + reason);
                 appendResult("编号 " + cn + "  错误 " + reason + "\n\n");
                 // 保存到「其他」分类
                 saveLineToFile("编号 " + cn + "  错误 " + reason, FirmwareCategory.CAT_OTHER);
@@ -559,6 +569,7 @@ public final class Scanner {
                     found = true;
                     model = extractModelFromFileName(fn);
                     ver = extractVersionFromFileName(fn);
+                    if (Log.on()) Log.add("[解析] " + cn + " 文件名=" + fn + " 型号=" + model + " 版本=" + ver);
                 }
             }
 
@@ -571,11 +582,15 @@ public final class Scanner {
                 // 实时分类并保存到文件
                 String category = FirmwareCategory.categorize(line);
                 saveLineToFile(line, category);
+                if (Log.on()) Log.add("[保存] " + cn + " → " + category);
+            } else {
+                if (Log.on()) Log.add("[无结果] " + cn + " 未提取到文件名，未保存");
             }
             updateProgress(num);
 
         } catch (IOException ex) {
             // 网络错误：显示原因并保存到「其他」
+            if (Log.on()) Log.add("[异常] " + cn + " IOException: " + ex.getClass().getSimpleName() + " " + ex.getMessage());
             appendResult("编号 " + cn + "  错误 网络错误(" + ex.getClass().getSimpleName() + ")\n\n");
             saveLineToFile("编号 " + cn + "  错误 网络错误", FirmwareCategory.CAT_OTHER);
             updateProgress(num);
@@ -610,6 +625,7 @@ public final class Scanner {
                         String w = extractWNumber(content);
                         if (!w.isEmpty() && w.equals(cn)) {
                             // 命中：返回该行去掉编号后的内容
+                            if (Log.on()) Log.add("[查重] " + cn + " 命中 " + filename + " : " + content);
                             return content;
                         }
                     }
@@ -619,7 +635,9 @@ public final class Scanner {
             }
         } catch (Exception e) {
             // 查重失败时忽略，按不存在处理（继续正常请求）
+            if (Log.on()) Log.add("[查重] " + cn + " 查重异常 " + e.getClass().getSimpleName());
         }
+        if (Log.on()) Log.add("[查重] " + cn + " 未命中，继续请求");
         return null;
     }
 

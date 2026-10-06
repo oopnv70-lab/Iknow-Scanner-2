@@ -116,7 +116,31 @@ public class SettingsActivity extends Activity {
         root.addView(btnOrganize, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
-        
+
+        // 设置项：启用请求日志（默认关闭）
+        CheckBox chkLog = new CheckBox(this);
+        chkLog.setText("启用请求日志");
+        chkLog.setPadding(0, 24, 0, 8);
+        chkLog.setChecked(prefs.getBoolean("log_enabled", false));
+        root.addView(chkLog, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // 查看运行日志按钮
+        Button btnViewLog = new Button(this);
+        btnViewLog.setText("查看运行日志");
+        btnViewLog.setPadding(0, 32, 0, 32);
+        btnViewLog.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new android.content.Intent(SettingsActivity.this, LogActivity.class));
+            }
+        });
+        root.addView(btnViewLog, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+
+
         // 保存按钮
         Button btnSave = new Button(this);
         btnSave.setText("保存设置");
@@ -142,8 +166,11 @@ public class SettingsActivity extends Activity {
                     prefs.edit()
                         .putInt("interval", interval)
                         .putInt("concurrent", concurrent)
+                        .putBoolean("log_enabled", chkLog.isChecked())
                         .apply();
-                    
+
+                    Log.setOn(chkLog.isChecked());
+
                     Toast.makeText(SettingsActivity.this, "设置已保存", Toast.LENGTH_SHORT).show();
                     finish();
                 } catch (NumberFormatException e) {
