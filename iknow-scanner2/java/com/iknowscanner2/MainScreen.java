@@ -193,6 +193,7 @@ public final class MainScreen {
     public void setStartEnabled(boolean b) { btnStart.setEnabled(b); }
     public void setResumeVisible(boolean b) { btnResume.setVisibility(b ? View.VISIBLE : View.GONE); }
     public void setSaveForbiddenEnabled(boolean b) { btnSaveForbidden.setEnabled(b); }
+    public void setClearEnabled(boolean b) { btnClear.setEnabled(b); }
     public void setHitCount(String s) { textHitCount.setText(s); }
     public void setResultText(String s) { textResult.setText(s); }
     public void setProgressText(String s) { textProgress.setText(s); }

@@ -159,6 +159,7 @@ public final class Scanner {
         this.screen.setStartEnabled(false);
         this.screen.setSaveForbiddenEnabled(false);
         this.screen.setResumeVisible(false);
+        this.screen.setClearEnabled(false);
 
         if (!resume) {
             this.prefs.edit().remove("resume_next").remove("resume_end").apply();
@@ -178,6 +179,7 @@ public final class Scanner {
         running = false;
         this.screen.setStartEnabled(true);
         this.screen.setSaveForbiddenEnabled(true);
+        this.screen.setClearEnabled(true);
         int cur = getCur();
         int end = getEnd();
         if (cur > 0 && cur <= end) {
@@ -284,6 +286,7 @@ public final class Scanner {
             public void run() {
                 screen.setStartEnabled(true);
                 screen.setSaveForbiddenEnabled(true);
+                screen.setClearEnabled(true);
                 if (running) {
                     prefs.edit().remove("resume_next").remove("resume_end").apply();
                     screen.setResumeVisible(false);
