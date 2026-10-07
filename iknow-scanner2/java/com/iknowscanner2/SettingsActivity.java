@@ -264,6 +264,7 @@ public class SettingsActivity extends Activity {
         intent.setType("text/*");   // 文本文件，含 .txt / .log / .csv 等
         intent.putExtra(android.content.Intent.EXTRA_MIME_TYPES,
             new String[]{"text/plain", "application/octet-stream"});
+        intent.putExtra(android.content.Intent.EXTRA_ALLOW_MULTIPLE, true);   // 允许多选
         try {
             startActivityForResult(intent, REQUEST_IMPORT_FILE);
         } catch (Exception e) {
@@ -275,8 +276,19 @@ public class SettingsActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_IMPORT_FILE && resultCode == RESULT_OK && data != null) {
-            final android.net.Uri uri = data.getData();
-            if (uri == null) {
+            // 收集选中的文件：多选走 ClipData，单选走 getData（兼容旧行为）
+            final java.util.List<android.net.Uri> uris = new java.util.ArrayList<android.net.Uri>();
+            android.content.ClipData clip = data.getClipData();
+            if (clip != null) {
+                for (int i = 0; i < clip.getItemCount(); i++) {
+                    android.net.Uri u = clip.getItemAt(i).getUri();
+                    if (u != null) uris.add(u);
+                }
+            }
+            if (uris.isEmpty() && data.getData() != null) {
+                uris.add(data.getData());
+            }
+            if (uris.isEmpty()) {
                 Toast.makeText(this, "未选择文件", Toast.LENGTH_SHORT).show();
                 return;
             }
@@ -285,19 +297,25 @@ public class SettingsActivity extends Activity {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    final String content = readTextFromUri(uri);
-                    if (content == null || content.trim().isEmpty()) {
-                        runOnUiThread(new Runnable() {
-                            public void run() {
-                                Toast.makeText(SettingsActivity.this, "文件为空或读取失败", Toast.LENGTH_LONG).show();
-                            }
-                        });
-                        return;
+                    StringBuilder sb = new StringBuilder();
+                    int okCount = 0;
+                    for (android.net.Uri uri : uris) {
+                        String content = readTextFromUri(uri);
+                        if (content == null || content.trim().isEmpty()) continue;
+                        sb.append(importLog(content)).append("\n");
+                        okCount++;
                     }
-                    final String summary = importLog(content);
+                    final String result;
+                    if (okCount == 0) {
+                        result = "文件为空或读取失败";
+                    } else if (uris.size() == 1) {
+                        result = sb.toString().trim();
+                    } else {
+                        result = "共 " + uris.size() + " 个文件：\n" + sb.toString().trim();
+                    }
                     runOnUiThread(new Runnable() {
                         public void run() {
-                            Toast.makeText(SettingsActivity.this, summary, Toast.LENGTH_LONG).show();
+                            Toast.makeText(SettingsActivity.this, result, Toast.LENGTH_LONG).show();
                         }
                     });
                 }
