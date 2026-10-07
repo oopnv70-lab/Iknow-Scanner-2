@@ -540,13 +540,8 @@ public final class Scanner {
             }
 
             String loc = c.getHeaderField("Location");
-            String ohc = c.getHeaderField("ohc-file-size");
             String model = "";
             String ver = "";
-            String fs = "";
-            if (ohc != null && ohc.length() > 0) {
-                fs = fs(ohc);
-            }
 
             // 判断 HTTP 错误码（非重定向、非 2xx），显示错误原因并保存到「其他」
             boolean redirect = (code == 301 || code == 302 || code == 303 || code == 307 || code == 308);
@@ -573,9 +568,9 @@ public final class Scanner {
                 }
             }
 
-            String line = String.format("%-12s %-14s %-26s %s", cn, model, ver, fs);
+            String line = String.format("%-12s %-14s %-26s", cn, model, ver);
             // 显示时带上汉字标识，存储仍用裸格式（line 用于去重/保存）
-            String display = "编号 " + cn + "  型号 " + model + "  系统版本 " + ver + "  大小 " + fs;
+            String display = "编号 " + cn + "  型号 " + model + "  系统版本 " + ver;
             appendResult(display + "\n\n");
             if (found) {
                 hitCount.incrementAndGet();
@@ -792,18 +787,6 @@ public final class Scanner {
         }
 
         return f.length() > 0 ? f : "";
-    }
-
-    private String fs(String s) {
-        try {
-            long b = Long.parseLong(s);
-            if (b >= 1073741824L) return String.format(Locale.getDefault(), "%.1fG", b / 1073741824.0);
-            if (b >= 1048576L) return String.format(Locale.getDefault(), "%.1fM", b / 1048576.0);
-            if (b >= 1024L) return String.format(Locale.getDefault(), "%.1fK", b / 1024.0);
-            return b + "B";
-        } catch (Exception e) {
-            return s;
-        }
     }
 
     private String mo(String m) {
